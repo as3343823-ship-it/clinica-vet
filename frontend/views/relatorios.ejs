@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <title>Relatórios</title>
+    <link rel="stylesheet" href="/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container">
+        <h2>Relatórios</h2>
+        <% if (typeof total !== 'undefined' && total !== null) { %>
+            <p>Total de animais: <%= total %></p>
+        <% } %>
+        <% if (typeof classifCount !== 'undefined' && classifCount !== null) { %>
+            <h3>Distribuição por classificação</h3>
+            <table class="table">
+                <tr><th>Classificação</th><th>Contagem</th></tr>
+                <% classifCount.forEach(c => { %>
+                    <tr><td><%= c.classif %></td><td><%= c.count %></td></tr>
+                <% }); %>
+            </table>
+        <% } %>
+        <% if (typeof animais !== 'undefined' && animais !== null) { %>
+            <h3>Sistema Manchester</h3>
+            <% animais.forEach(a => { %>
+                <p><%= a.nome %> - <%= a.classif %></p>
+            <% }); %>
+        <% } %>
+    </div>
+</body>
+</html>

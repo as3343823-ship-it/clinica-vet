@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <title>Criar Funcionário</title>
+    <link rel="stylesheet" href="/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container mt-5">
+        <h2 class="text-center mb-4">Criar Novo Funcionário</h2>
+        <% if (typeof error !== 'undefined' && error) { %>
+            <div class="alert alert-danger" role="alert">
+                <%= error %>
+            </div>
+        <% } %>
+        <form action="/admin/criar-funcionario" method="POST">
+            <div class="mb-3">
+                <label for="username" class="form-label">Username</label>
+                <input type="text" name="username" id="username" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label for="senha" class="form-label">Senha</label>
+                <input type="password" name="senha" id="senha" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label for="nivel" class="form-label">Nível</label>
+                <select name="nivel" id="nivel" class="form-select" required>
+                    <option value="funcionario">Funcionário</option>
+                    <option value="administrador">Administrador</option>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary w-100">Criar</button>
+        </form>
+    </div>
+</body>
+</html>

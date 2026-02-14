@@ -1,0 +1,7 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head><title>Perfil</title><link rel="stylesheet" href="/css/bootstrap.min.css"></head>
+<body><div class="container mt-5"><h2>Perfil de <%= user.username %></h2>
+<form action="/auth/editar-perfil" method="POST">
+<input type="text" name="nome" value="<%= user.nome %>" class="form-control" required>
+<button type="submit" class="btn btn-primary">Salvar</button></form></div></body></html>

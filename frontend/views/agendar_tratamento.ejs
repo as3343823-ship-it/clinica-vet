@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <title>Agendar Tratamento</title>
+    <link rel="stylesheet" href="/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container mt-5">
+        <h2 class="text-center mb-4">Agendar Tratamento</h2>
+        <form action="/agenda/agendar-tratamento" method="POST">
+            <div class="mb-3">
+                <label for="nome_animal" class="form-label">Nome do Animal</label>
+                <input type="text" name="nome_animal" id="nome_animal" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label for="tipo" class="form-label">Tipo de Tratamento</label>
+                <input type="text" name="tipo" id="tipo" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label for="descricao" class="form-label">Descrição</label>
+                <textarea name="descricao" id="descricao" class="form-control" required></textarea>
+            </div>
+            <div class="mb-3">
+                <label for="data" class="form-label">Data (DD/MM/AAAA)</label>
+                <input type="text" name="data" id="data" class="form-control" required>
+            </div>
+            <button type="submit" class="btn btn-primary w-100">Agendar</button>
+        </form>
+    </div>
+</body>
+</html>

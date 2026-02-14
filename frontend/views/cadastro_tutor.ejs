@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <title>Cadastro de Tutor</title>
+    <link rel="stylesheet" href="/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container mt-5">
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <h2 class="text-center mb-4">Cadastro de Novo Cliente (Tutor)</h2>
+
+                <!-- Correção aqui: proteção contra error undefined -->
+                <% if (typeof error !== 'undefined' && error) { %>
+                    <div class="alert alert-danger" role="alert">
+                        <%= error %>
+                    </div>
+                <% } %>
+
+                <form action="/auth/cadastrar-tutor" method="POST">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="nome" class="form-label">Nome completo</label>
+                            <input type="text" name="nome" id="nome" class="form-control" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="email" class="form-label">Email</label>
+                            <input type="email" name="email" id="email" class="form-control" required>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="telefone" class="form-label">Telefone</label>
+                            <input type="text" name="telefone" id="telefone" class="form-control">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="genero" class="form-label">Gênero</label>
+                            <input type="text" name="genero" id="genero" class="form-control">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="morada" class="form-label">Morada</label>
+                        <input type="text" name="morada" id="morada" class="form-control">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="password" class="form-label">Password</label>
+                        <input type="password" name="password" id="password" class="form-control" required>
+                    </div>
+
+                    <button type="submit" class="btn btn-success w-100">Cadastrar</button>
+                </form>
+
+                <p class="text-center mt-3">
+                    Já tem conta? <a href="/auth/login-tutor">Faça login aqui</a>
+                </p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

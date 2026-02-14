@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <title>Cadastrar Animal</title>
+    <link rel="stylesheet" href="/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container mt-5">
+        <h2 class="text-center mb-4">Cadastrar Animal</h2>
+        <form action="/animais/cadastrar-animal" method="POST" enctype="multipart/form-data">
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="nome" class="form-label">Nome do animal</label>
+                    <input type="text" name="nome" id="nome" class="form-control" required>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="idade" class="form-label">Idade (em anos)</label>
+                    <input type="number" name="idade" id="idade" class="form-control" min="0" required>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="especie" class="form-label">Espécie</label>
+                    <select name="especie" id="especie" class="form-select" required>
+                        <% especies.forEach(esp => { %>
+                            <option value="<%= esp %>"><%= esp %></option>
+                        <% }); %>
+                    </select>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="raca" class="form-label">Raça</label>
+                    <input type="text" name="raca" id="raca" class="form-control">
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="sexo" class="form-label">Sexo</label>
+                    <select name="sexo" id="sexo" class="form-select" required>
+                        <option value="Macho">Macho</option>
+                        <option value="Fêmea">Fêmea</option>
+                    </select>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="peso" class="form-label">Peso (kg)</label>
+                    <input type="number" name="peso" id="peso" class="form-control" step="0.01" min="0" required>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label for="sintomas" class="form-label">Sintomas principais (descreva detalhadamente)</label>
+                <textarea name="sintomas" id="sintomas" class="form-control" rows="4" placeholder="Ex: Vomito, diarreia, falta de apetite há 2 dias..." required></textarea>
+            </div>
+
+            <div class="mb-3">
+                <label for="vacinas" class="form-label">Histórico de vacinas (opcional)</label>
+                <textarea name="vacinas" id="vacinas" class="form-control" rows="2" placeholder="Ex: Vacina antirrábica em 01/2023"></textarea>
+            </div>
+
+            <div class="mb-3">
+                <label for="historico" class="form-label">Histórico médico anterior (opcional)</label>
+                <textarea name="historico" id="historico" class="form-control" rows="3" placeholder="Ex: Cirurgia em 2022, alergia a medicamento X"></textarea>
+            </div>
+
+            <div class="mb-3">
+                <label for="gravidade" class="form-label">Gravidade dos sintomas</label>
+                <select name="gravidade" id="gravidade" class="form-select" required>
+                    <option value="1" selected>Leve (animal come e brinca normalmente)</option>
+                    <option value="2">Moderado (animal está abatido, mas responde)</option>
+                    <option value="3">Grave (animal não come, está muito abatido)</option>
+                </select>
+            </div>
+
+            <div class="mb-4">
+                <label for="imagem" class="form-label">Foto do animal (opcional, JPG/PNG, max 5MB)</label>
+                <input type="file" name="imagem" id="imagem" class="form-control" accept="image/jpeg, image/png">
+            </div>
+
+            <button type="submit" class="btn btn-primary w-100">Cadastrar Animal</button>
+        </form>
+    </div>
+</body>
+</html>
