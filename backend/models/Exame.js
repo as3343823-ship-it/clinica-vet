@@ -1,11 +1,12 @@
-class Tratamento {
-  constructor(id, tipo, descricao, data, realizado, animalId) {
+class Exame {
+  constructor(id, tipo, resultados, data, realizado, animalId) {
     this.id = id;
     this.tipo = tipo;
-    this.descricao = descricao;
+    this.resultados = resultados;
     this.data = data;
     this.realizado = realizado;
     this.animalId = animalId;
   }
 }
-module.exports = Tratamento;
+
+module.exports = Exame;

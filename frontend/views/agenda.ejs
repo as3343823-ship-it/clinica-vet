@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agenda</title>
+    <link rel="stylesheet" href="/css/bootstrap.min.css">
+</head>
+<body>
+    <% const listaTratamentos = Array.isArray(tratamentos) ? tratamentos : []; %>
+    <% const listaExames = Array.isArray(exames) ? exames : []; %>
+    <div class="container py-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2 class="mb-0"><%= isTutor ? 'Agenda dos seus animais' : 'Agenda da clínica' %></h2>
+            <a class="btn btn-outline-secondary" href="<%= isTutor ? '/menu-cliente' : '/menu-funcionario' %>">Voltar</a>
+        </div>
+
+        <% if (!isTutor) { %>
+            <div class="mb-3">
+                <a class="btn btn-primary" href="/agenda/agendar-tratamento">Novo tratamento</a>
+            </div>
+        <% } %>
+
+        <div class="row g-4">
+            <div class="col-lg-6">
+                <h4>Tratamentos</h4>
+                <% if (!listaTratamentos.length) { %>
+                    <p class="text-muted">Nenhum tratamento agendado.</p>
+                <% } else { %>
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Animal</th>
+                                <th>Tipo</th>
+                                <th>Data</th>
+                                <% if (!isTutor) { %><th>Tutor</th><% } %>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <% listaTratamentos.forEach(t => { %>
+                                <tr>
+                                    <td><%= t.animal_nome %></td>
+                                    <td><%= t.tipo %></td>
+                                    <td><%= t.data %></td>
+                                    <% if (!isTutor) { %><td><%= t.tutor_nome %></td><% } %>
+                                </tr>
+                            <% }) %>
+                        </tbody>
+                    </table>
+                <% } %>
+            </div>
+
+            <div class="col-lg-6">
+                <h4>Exames</h4>
+                <% if (!listaExames.length) { %>
+                    <p class="text-muted">Nenhum exame agendado.</p>
+                <% } else { %>
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Animal</th>
+                                <th>Tipo</th>
+                                <th>Data</th>
+                                <% if (!isTutor) { %><th>Tutor</th><% } %>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <% listaExames.forEach(e => { %>
+                                <tr>
+                                    <td><%= e.animal_nome %></td>
+                                    <td><%= e.tipo %></td>
+                                    <td><%= e.data %></td>
+                                    <% if (!isTutor) { %><td><%= e.tutor_nome %></td><% } %>
+                                </tr>
+                            <% }) %>
+                        </tbody>
+                    </table>
+                <% } %>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

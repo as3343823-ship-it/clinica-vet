@@ -1,29 +1,97 @@
 <!DOCTYPE html>
 <html lang="pt">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Relatórios</title>
     <link rel="stylesheet" href="/css/bootstrap.min.css">
 </head>
 <body>
-    <div class="container">
-        <h2>Relatórios</h2>
-        <% if (typeof total !== 'undefined' && total !== null) { %>
-            <p>Total de animais: <%= total %></p>
+    <div class="container py-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2 class="mb-0">Relatórios Administrativos</h2>
+            <a class="btn btn-outline-secondary" href="/menu-funcionario">Voltar</a>
+        </div>
+
+        <div class="mb-4 d-flex gap-2 flex-wrap">
+            <a class="btn btn-primary" href="/relatorios/gerar-relatorios">Resumo geral</a>
+            <a class="btn btn-outline-primary" href="/relatorios/sistema-manchester">Sistema Manchester</a>
+        </div>
+
+        <% if (totalAnimais !== null && totalAnimais !== undefined) { %>
+            <div class="row g-3 mb-4">
+                <div class="col-md-4"><div class="card"><div class="card-body"><h6>Total de animais</h6><h3><%= totalAnimais %></h3></div></div></div>
+                <div class="col-md-4"><div class="card"><div class="card-body"><h6>Total de tutores</h6><h3><%= totalTutores %></h3></div></div></div>
+                <div class="col-md-4"><div class="card"><div class="card-body"><h6>Peso médio</h6><h3><%= mediaPeso %> kg</h3></div></div></div>
+            </div>
+
+            <div class="row g-4">
+                <div class="col-lg-6">
+                    <h5>Distribuição por classificação</h5>
+                    <table class="table table-striped">
+                        <thead><tr><th>Classificação</th><th>Contagem</th></tr></thead>
+                        <tbody>
+                            <% classifCount.forEach(c => { %>
+                                <tr><td><%= c.classif %></td><td><%= c.count %></td></tr>
+                            <% }); %>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="col-lg-6">
+                    <h5>Distribuição por espécie</h5>
+                    <table class="table table-striped">
+                        <thead><tr><th>Espécie</th><th>Contagem</th></tr></thead>
+                        <tbody>
+                            <% especiesCount.forEach(e => { %>
+                                <tr><td><%= e.especie %></td><td><%= e.count %></td></tr>
+                            <% }); %>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="col-lg-6">
+                    <h5>Top 5 tutores por número de animais</h5>
+                    <table class="table table-striped">
+                        <thead><tr><th>Tutor</th><th>Email</th><th>Animais</th></tr></thead>
+                        <tbody>
+                            <% topTutores.forEach(t => { %>
+                                <tr><td><%= t.nome %></td><td><%= t.email %></td><td><%= t.total_animais %></td></tr>
+                            <% }); %>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="col-lg-6">
+                    <h5>Animais mais urgentes</h5>
+                    <table class="table table-striped">
+                        <thead><tr><th>Animal</th><th>Classif.</th><th>Tutor</th></tr></thead>
+                        <tbody>
+                            <% urgentes.forEach(a => { %>
+                                <tr><td><%= a.nome %></td><td><%= a.classif %></td><td><%= a.tutor_nome %></td></tr>
+                            <% }); %>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         <% } %>
-        <% if (typeof classifCount !== 'undefined' && classifCount !== null) { %>
-            <h3>Distribuição por classificação</h3>
-            <table class="table">
-                <tr><th>Classificação</th><th>Contagem</th></tr>
-                <% classifCount.forEach(c => { %>
-                    <tr><td><%= c.classif %></td><td><%= c.count %></td></tr>
-                <% }); %>
+
+        <% if (animais && animais.length) { %>
+            <h5 class="mt-4">Sistema Manchester (ordem de prioridade)</h5>
+            <table class="table table-striped">
+                <thead><tr><th>ID</th><th>Animal</th><th>Classificação</th><th>Tutor</th><th>Sintomas</th></tr></thead>
+                <tbody>
+                    <% animais.forEach(a => { %>
+                        <tr>
+                            <td><%= a.id %></td>
+                            <td><%= a.nome %></td>
+                            <td><%= a.classif %></td>
+                            <td><%= a.tutor_nome %></td>
+                            <td><%= a.sintomas %></td>
+                        </tr>
+                    <% }); %>
+                </tbody>
             </table>
-        <% } %>
-        <% if (typeof animais !== 'undefined' && animais !== null) { %>
-            <h3>Sistema Manchester</h3>
-            <% animais.forEach(a => { %>
-                <p><%= a.nome %> - <%= a.classif %></p>
-            <% }); %>
         <% } %>
     </div>
 </body>
