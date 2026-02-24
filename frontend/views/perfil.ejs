@@ -1,7 +1,32 @@
 <!DOCTYPE html>
 <html lang="pt">
-<head><title>Perfil</title><link rel="stylesheet" href="/css/bootstrap.min.css"></head>
-<body><div class="container mt-5"><h2>Perfil de <%= user.username %></h2>
-<form action="/auth/editar-perfil" method="POST">
-<input type="text" name="nome" value="<%= user.nome %>" class="form-control" required>
-<button type="submit" class="btn btn-primary">Salvar</button></form></div></body></html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Perfil</title>
+    <link rel="stylesheet" href="/css/bootstrap.min.css">
+</head>
+<body>
+    <% const safeUser = (typeof user !== 'undefined' && user) ? user : {}; %>
+
+    <div class="container mt-5" style="max-width: 720px;">
+        <h2 class="mb-4">Perfil de <%= safeUser.username || safeUser.email || 'Utilizador' %></h2>
+
+        <form action="/auth/editar-perfil" method="POST">
+            <div class="mb-3">
+                <label for="nome" class="form-label">Nome</label>
+                <input
+                    id="nome"
+                    type="text"
+                    name="nome"
+                    value="<%= safeUser.nome || '' %>"
+                    class="form-control"
+                    required
+                >
+            </div>
+
+            <button type="submit" class="btn btn-primary">Salvar</button>
+        </form>
+    </div>
+</body>
+</html>

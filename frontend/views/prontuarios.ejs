@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Prontuários e Pontuários</title>
+  <link rel="stylesheet" href="/css/bootstrap.min.css" />
+</head>
+<body>
+  <% const lista = Array.isArray(pontuarios) ? pontuarios : []; %>
+  <div class="container py-4">
+    <h2 class="mb-3">Prontuários dos Animais</h2>
+    <p class="text-muted">Lista organizada por prioridade (maior pontuário primeiro).</p>
+
+    <% if (!lista.length) { %>
+      <div class="alert alert-info">Nenhum prontuário disponível.</div>
+    <% } else { %>
+      <div class="table-responsive">
+        <table class="table table-striped align-middle">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Animal</th>
+              <th>Classificação</th>
+              <th>Pontuário</th>
+              <% if (user.tipo === 'funcionario') { %><th>Tutor ID</th><% } %>
+            </tr>
+          </thead>
+          <tbody>
+            <% lista.forEach(item => { %>
+              <tr>
+                <td><%= item.id %></td>
+                <td><%= item.nome %></td>
+                <td><span class="badge text-bg-primary"><%= item.classif %></span></td>
+                <td><span class="badge text-bg-warning text-dark"><%= item.pontuario %></span></td>
+                <% if (user.tipo === 'funcionario') { %><td><%= item.tutor_id %></td><% } %>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    <% } %>
+
+    <a class="btn btn-outline-secondary" href="<%= user.tipo === 'funcionario' ? '/menu-funcionario' : '/menu-cliente' %>">Voltar</a>
+  </div>
+</body>
+</html>

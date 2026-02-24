@@ -1,15 +1,42 @@
 <!DOCTYPE html>
 <html lang="pt">
-<head><title>Cadastro Animal</title><link rel="stylesheet" href="/css/bootstrap.min.css"></head>
-<body><div class="container"><h2>Cadastrar Animal</h2>
-<form action="/animais/cadastrar-animal" method="POST" enctype="multipart/form-data">
-<input type="text" name="nome" placeholder="Nome do animal" required>
-<input type="number" name="idade" placeholder="Idade" required>
-<select name="especie"><% especies.forEach(esp => { %><option value="<%= esp %>"><%= esp %></option><% }); %></select>
-<input type="text" name="sexo" placeholder="Sexo (Macho/Fêmea)" required>
-<input type="number" name="peso" placeholder="Peso (kg)" required>
-<textarea name="sintomas" placeholder="Sintomas"></textarea>
-<select name="gravidade"><option value="1">Leve</option><option value="2">Moderado</option><option value="3">Grave</option></select>
-<input type="file" name="imagem" accept="image/*">
-<button type="submit">Cadastrar</button></form>
-<script src="/js/app.js"></script></div></body></html>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ficha do Animal</title>
+  <link rel="stylesheet" href="/css/bootstrap.min.css" />
+</head>
+<body>
+  <div class="container py-4">
+    <a href="/animais/lista-completa" class="btn btn-outline-secondary mb-3">&larr; Voltar</a>
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h3 class="mb-3">Ficha: <%= animal.nome %></h3>
+        <div class="row">
+          <div class="col-md-4">
+            <% if (animal.imagem_path) { %>
+              <img src="<%= animal.imagem_path %>" alt="Foto do animal" class="img-fluid rounded" />
+            <% } else { %>
+              <div class="border rounded p-4 text-center text-muted">Sem foto</div>
+            <% } %>
+          </div>
+          <div class="col-md-8">
+            <p><strong>ID:</strong> <%= animal.id %></p>
+            <p><strong>Espécie:</strong> <%= animal.especie %></p>
+            <p><strong>Sexo:</strong> <%= animal.sexo %></p>
+            <p><strong>Peso:</strong> <%= animal.peso %> kg</p>
+            <p><strong>Classificação Manchester:</strong> <%= animal.classif %></p>
+            <p><strong>Pontuário:</strong> <%= animal.pontuario %></p>
+            <p><strong>Sintomas:</strong> <%= animal.sintomas %></p>
+            <hr>
+            <h5>Tutor associado</h5>
+            <p><strong>Nome:</strong> <%= animal.tutor_nome %></p>
+            <p><strong>Email:</strong> <%= animal.tutor_email %></p>
+            <p><strong>Telefone:</strong> <%= animal.tutor_telefone || 'N/D' %></p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

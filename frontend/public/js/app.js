@@ -1,93 +1,47 @@
-const express = require('express');
-const bodyParser = require('body-parser');
-const cookieParser = require('cookie-parser');
-const jwt = require('jsonwebtoken');
-const multer = require('multer');
-const path = require('path');
-const db = require('./config/db');
-const app = express();
-
-const JWT_SECRET = 'seu-secret-super-seguro-aqui';  // Mude para uma chave segura em produção
-
-// Configuração EJS para views
-app.set('view engine', 'ejs');
-app.set('views', path.join(__dirname, '../frontend/views'));
-
-// Servir arquivos estáticos (CSS, JS, imagens)
-app.use(express.static(path.join(__dirname, '../frontend/public')));
-
-// Parsers para body e cookies
-app.use(bodyParser.urlencoded({ extended: true }));
-app.use(bodyParser.json());
-app.use(cookieParser());
-
-// Configuração Multer para upload de imagens (para animais)
-const storage = multer.diskStorage({
-  destination: (_, __, cb) => cb(null, path.join(__dirname, '../frontend/public/images/animais')),
-  filename: (_, file, cb) => cb(null, Date.now() + '-' + file.originalname)
-});
-const upload = multer({
-  storage,
-  limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter: (_, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    cb(ext.match(/\.(jpg|jpeg|png)$/) ? null : new Error('Só JPG/JPEG/PNG'), true);
-  }
-});
-
-// Middleware JWT para rotas protegidas
-const verifyJWT = (req, res, next) => {
-  const token = req.cookies.jwt;
-  if (!token) return res.redirect('/');
-  try {
-    req.user = jwt.verify(token, JWT_SECRET);
-    next();
-  } catch {
-    res.clearCookie('jwt');
-    res.redirect('/');
-  }
-};
-
-// Rotas
-app.use('/auth', require('./routes/auth'));
-app.use('/animais', verifyJWT, require('./routes/animais'));
-app.use('/agenda', verifyJWT, require('./routes/agenda'));
-app.use('/relatorios', verifyJWT, require('./routes/relatorios'));
-
-// Rota inicial (menu inicial)
-app.get('/', (_, res) => res.render('menu_inicial'));
-
-// Menu funcionário (protegido)
-app.get('/menu-funcionario', verifyJWT, (req, res) => req.user.tipo === 'funcionario' ? res.render('menu_funcionario', { user: req.user }) : res.status(403).send('Proibido'));
-
-// Menu cliente (protegido)
-app.get('/menu-cliente', verifyJWT, (req, res) => req.user.tipo === 'tutor' ? res.render('menu_cliente', { user: req.user }) : res.status(403).send('Proibido'));
-
-// Inicia o servidor
-app.listen(3000, () => console.log('Server on 3000'));
-
 document.addEventListener('DOMContentLoaded', () => {
   const body = document.body;
   const toggle = document.getElementById('mode-toggle');
 
-  // Carrega tema salvo
-  if (localStorage.getItem('theme') === 'dark') {
-    body.setAttribute('data-bs-theme', 'dark');
-    toggle.innerHTML = '<i class="bi bi-sun-fill me-2"></i> Modo Claro';
+  const getSavedTheme = () => {
+    try {
+      return localStorage.getItem('theme');
+    } catch (_) {
+      return null;
+    }
+  };
+
+  const saveTheme = (theme) => {
+    try {
+      localStorage.setItem('theme', theme);
+    } catch (_) {
+      // ignora ambientes em que localStorage não está disponível
+    }
+  };
+
+  const applyTheme = (theme) => {
+    const isDark = theme === 'dark';
+    body.setAttribute('data-bs-theme', isDark ? 'dark' : 'light');
+
+    if (toggle) {
+      toggle.innerHTML = isDark
+        ? '<i class="bi bi-sun-fill me-2"></i> Modo Claro'
+        : '<i class="bi bi-moon-stars-fill me-2"></i> Modo Escuro';
+    }
+  };
+
+  // aplica o tema salvo em qualquer página
+  const savedTheme = getSavedTheme();
+  applyTheme(savedTheme === 'dark' ? 'dark' : 'light');
+
+  // páginas sem botão de tema não precisam de listener
+  if (!toggle) {
+    return;
   }
 
   toggle.addEventListener('click', () => {
-    if (body.getAttribute('data-bs-theme') === 'dark') {
-      body.setAttribute('data-bs-theme', 'light');
-      localStorage.setItem('theme', 'light');
-      toggle.innerHTML = '<i class="bi bi-moon-stars-fill me-2"></i> Modo Escuro';
-    } else {
-      body.setAttribute('data-bs-theme', 'dark');
-      localStorage.setItem('theme', 'dark');
-      toggle.innerHTML = '<i class="bi bi-sun-fill me-2"></i> Modo Claro';
-    }
+    const currentTheme = body.getAttribute('data-bs-theme') === 'dark' ? 'dark' : 'light';
+    const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    applyTheme(nextTheme);
+    saveTheme(nextTheme);
   });
 });
-
-// Exporta upload e verifyJWT para outros arquivos
-module.exports = { upload, verifyJWT };
