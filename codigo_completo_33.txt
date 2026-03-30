@@ -1,0 +1,1146 @@
+===== RELATORIO_ATIVIDADES_REALIZADAS.md =====
+
+===== RELATORIO_ESTRUTURA_CLASSES.md =====
+
+===== RELATORIO_OBJETIVO_PROJETO.md =====
+
+===== backend/app.js =====
+const express = require('express');
+const bodyParser = require('body-parser');
+const cookieParser = require('cookie-parser');
+const path = require('path');
+const multer = require('multer');
+const db = require('./config/db');
+const { verifyJWT } = require('./middleware/auth');
+
+const {
+  handleLoginFuncionario,
+  handleLoginTutor,
+  handleCadastrarTutor,
+  handleAlterarSenha
+} = require('./controllers/authController');
+
+const app = express();
+
+
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, '../frontend/views'));
+app.use(express.static(path.join(__dirname, '../frontend/public')));
+
+// Arquivos est├íticos (CSS, JS, imagens)
+app.use(express.static(path.join(__dirname, '../frontend/public')));
+
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.json());
+app.use(cookieParser());
+
+// Multer para upload de imagens
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, path.join(__dirname, '../frontend/public/images/animais')),
+  filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname)
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (ext !== '.jpg' && ext !== '.jpeg' && ext !== '.png') return cb(new Error('Apenas JPG/JPEG/PNG'));
+    cb(null, true);
+  }
+});
+
+
+// Rotas
+app.use('/auth', require('./routes/auth'));
+app.use('/animais', verifyJWT, require('./routes/animais'));
+app.use('/agenda', verifyJWT, require('./routes/agenda'));
+app.use('/relatorios', verifyJWT, require('./routes/relatorios'));
+
+app.get('/', (req, res) => res.render('menu_inicial'));
+
+app.get('/menu-funcionario', verifyJWT, (req, res) => {
+  if (req.user.tipo !== 'funcionario') return res.status(403).send('Acesso negado');
+  res.render('menu_funcionario', { user: req.user });
+});
+
+app.get('/menu-cliente', verifyJWT, (req, res) => {
+  if (req.user.tipo !== 'tutor') return res.status(403).send('Acesso negado');
+  res.render('menu_cliente', { user: req.user });
+});
+
+app.listen(3000, () => console.log('Server on 3000'));
+module.exports = { 
+  upload, 
+  
+}; 
+
+
+===== backend/controllers/adminController.js =====
+const { listUsuarios, criarUsuario, editarUsuario, resetSenha, ativarDesativar } = require('../services/adminService');
+
+const handleListarUsuarios = async (req, res) => {
+  if (req.user.nivel !== 'administrador') return res.status(403).send('Acesso negado');
+  const usuarios = await listUsuarios();
+  res.render('admin_usuarios', { usuarios });
+};
+
+// Similar para criar/editar/reset/ativar (use bcrypt.hashSync para senhas)
+
+===== backend/controllers/agendaController.js =====
+const { agendarTratamento, agendarExame, listarAgendamentos, verAgendaTutor } = require('../services/agendaService');
+
+const handleAgendarTratamento = async (req, res) => {
+  try {
+    await agendarTratamento(req.body);
+    res.send('Tratamento agendado');
+  } catch (error) {
+    res.status(500).send('Erro');
+  }
+};
+
+const handleAgendarExame = async (req, res) => {
+  try {
+    await agendarExame(req.body);
+    res.send('Exame agendado');
+  } catch (error) {
+    res.status(500).send('Erro');
+  }
+};
+
+const handleListarAgendamentos = async (req, res) => {
+  try {
+    const { tratamentos, exames } = await listarAgendamentos();
+    res.render('menu_funcionario', { tratamentos, exames, user: req.user });
+  } catch (error) {
+    res.status(500).send('Erro');
+  }
+};
+
+const handleVerAgenda = async (req, res) => {
+  if (req.user.tipo !== 'tutor') return res.status(403).send('Proibido');
+  try {
+    const animais = await verAgendaTutor(req.user.id);
+    res.render('menu_cliente', { animais, user: req.user }); // Adapte view
+  } catch (error) {
+    res.status(500).send('Erro');
+  }
+};
+
+module.exports = { handleAgendarTratamento, handleAgendarExame, handleListarAgendamentos, handleVerAgenda };
+
+===== backend/controllers/animaisController.js =====
+const { cadastrarAnimal, listarAnimaisPorTutor, darAltaAnimal } = require('../services/animaisService');
+const { LISTA_ESPECIES } = require('../especies');
+
+const handleCadastrarAnimal = async (req, res) => {
+  const tutorId = req.user.tipo === 'tutor' ? req.user.id : req.body.tutorId;
+  const imagemPath = req.file ? `/images/animais/${req.file.filename}` : null;
+  try {
+    await cadastrarAnimal(req.body, tutorId, imagemPath);
+    res.redirect(req.user.tipo === 'funcionario' ? '/menu-funcionario' : '/menu-cliente');
+  } catch (error) {
+    res.status(500).send(error);
+  }
+};
+
+const handleListarAnimais = async (req, res) => {
+  if (req.user.tipo !== 'tutor') return res.status(403).send('Proibido');
+  try {
+    const animais = await listarAnimaisPorTutor(req.user.id);
+    res.render('menu_cliente', { animais, user: req.user });
+  } catch (error) {
+    res.status(500).send(error);
+  }
+};
+
+const handleDarAltaAnimal = async (req, res) => {
+  try {
+    await darAltaAnimal(req.body.nome);
+    res.send('Alta OK');
+  } catch (error) {
+    res.status(404).send(error);
+  }
+};
+
+const showCadastroAnimal = (_, res) => res.render('cadastro_animal', { especies: LISTA_ESPECIES });
+
+module.exports = { handleCadastrarAnimal, handleListarAnimais, handleDarAltaAnimal, showCadastroAnimal };
+
+===== backend/controllers/relatoriosController.js =====
+const { gerarRelatorios, sistemaManchester } = require('../services/relatoriosService');
+
+const handleGerarRelatorios = async (req, res) => {
+  try {
+    const { total, classifCount } = await gerarRelatorios();
+    res.render('relatorios', { total, classifCount });
+  } catch (error) {
+    res.status(500).send('Erro');
+  }
+};
+
+const handleSistemaManchester = async (req, res) => {
+  try {
+    const animais = await sistemaManchester();
+    res.render('relatorios', { animais });
+  } catch (error) {
+    res.status(500).send('Erro');
+  }
+};
+
+module.exports = { handleGerarRelatorios, handleSistemaManchester };
+
+===== backend/models/Exame.js =====
+class Tratamento {
+  constructor(id, tipo, descricao, data, realizado, animalId) {
+    this.id = id;
+    this.tipo = tipo;
+    this.descricao = descricao;
+    this.data = data;
+    this.realizado = realizado;
+    this.animalId = animalId;
+  }
+}
+module.exports = Tratamento;
+
+===== backend/routes/admin.js =====
+const express = require('express');
+const router = express.Router();
+const { verifyJWT } = require('../middleware/auth');
+const { handleListarUsuarios, handleCriarUsuario, handleEditarUsuario, handleResetSenha, handleAtivarDesativar } = require('../controllers/adminController');
+
+router.get('/listar-usuarios', verifyJWT, handleListarUsuarios);
+router.post('/criar-usuario', verifyJWT, handleCriarUsuario);
+router.post('/editar-usuario/:id', verifyJWT, handleEditarUsuario);
+router.post('/reset-senha/:id', verifyJWT, handleResetSenha);
+router.post('/ativar-desativar/:id', verifyJWT, handleAtivarDesativar);
+
+router.get('/criar-funcionario', verifyJWT, (req, res) => {
+  if (req.user.nivel !== 'administrador') return res.status(403).send('Acesso proibido');
+  res.render('admin_criar_funcionario', { error: null });
+});
+
+router.post('/criar-funcionario', verifyJWT, (req, res) => {
+  if (req.user.nivel !== 'administrador') return res.status(403).send('Acesso proibido');
+  const { username, senha, nivel } = req.body;
+  const senhaHash = bcrypt.hashSync(senha, 10);
+  db.query('INSERT INTO usuarios (username, senha_hash, nivel) VALUES (?, ?, ?)', [username, senhaHash, nivel], (err) => {
+    if (err) return res.render('admin_criar_funcionario', { error: 'Erro ao criar usu├írio' });
+    res.redirect('/menu-funcionario');
+  });
+});
+
+module.exports = router;
+
+===== backend/routes/agenda.js =====
+const express = require('express');
+const router = express.Router();
+const { verifyJWT } = require('../middleware/auth');
+const { handleAgendarTratamento, handleAgendarExame, handleListarAgendamentos, handleVerAgenda } = require('../controllers/agendaController');
+
+router.post('/agendar-tratamento', verifyJWT, handleAgendarTratamento);
+router.post('/agendar-exame', verifyJWT, handleAgendarExame);
+router.get('/listar-agendamentos', verifyJWT, handleListarAgendamentos);
+router.get('/ver-agenda', verifyJWT, handleVerAgenda);
+
+module.exports = router;
+
+===== backend/routes/animais.js =====
+const express = require('express');
+const multer = require('multer');
+const path = require('path');
+const router = express.Router();
+const { verifyJWT } = require('../middleware/auth');
+const { handleCadastrarAnimal, handleListarAnimais, handleDarAltaAnimal, showCadastroAnimal } = require('../controllers/animaisController');
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, path.join(__dirname, '../../frontend/public/images/animais'));
+  },
+  filename: (req, file, cb) => {
+    cb(null, Date.now() + '-' + file.originalname);
+  }
+});
+
+const upload = multer({
+  storage: storage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (ext !== '.jpg' && ext !== '.jpeg' && ext !== '.png') {
+      return cb(new Error('Apenas JPG, JPEG ou PNG s├úo permitidos'));
+    }
+    cb(null, true);
+  }
+});
+
+router.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).send('Imagem muito grande! M├íximo 5 MB.');
+    }
+  } else if (err) {
+    return res.status(400).send(err.message);
+  }
+  next();
+});
+
+router.get('/cadastrar-animal', verifyJWT, showCadastroAnimal);
+router.post('/cadastrar-animal', verifyJWT, upload.single('imagem'), handleCadastrarAnimal);
+router.get('/listar-animais', verifyJWT, handleListarAnimais);
+router.post('/buscar-animal', verifyJWT, handleDarAltaAnimal);
+
+module.exports = router;
+
+===== backend/routes/auth.js =====
+const express = require('express');
+const router = express.Router();
+const db = require('../config/db');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+
+// Middleware JWT (copiado para dentro do arquivo para evitar depend├¬ncia circular)
+const JWT_SECRET = 'seu-secret-super-seguro-aqui';  // Mude isso em produ├º├úo
+
+const verifyJWT = (req, res, next) => {
+  const token = req.cookies.jwt;
+  if (!token) return res.redirect('/');
+
+  try {
+    req.user = jwt.verify(token, JWT_SECRET);
+    next();
+  } catch (err) {
+    res.clearCookie('jwt');
+    res.redirect('/');
+  }
+};
+
+// Rota GET - Mostra tela inicial com login/cadastro
+router.get('/', (req, res) => {
+  res.render('menu_inicial', { error: null });
+});
+
+// Rota POST - Login ├║nico (funcion├írio ou tutor)
+router.post('/login', (req, res) => {
+  const { email, senha } = req.body;
+
+  // Tenta como funcion├írio (username = email)
+  db.query('SELECT * FROM usuarios WHERE username = ?', [email], (err, results) => {
+    if (err) {
+      console.error('Erro no servidor (funcion├írio):', err);
+      return res.status(500).send('Erro no servidor');
+    }
+
+    if (results.length > 0) {
+      const user = results[0];
+      if (bcrypt.compareSync(senha, user.senha_hash)) {
+        const token = jwt.sign({
+          id: user.id,
+          username: user.username,
+          nivel: user.nivel,
+          tipo: 'funcionario'
+        }, JWT_SECRET, { expiresIn: '1h' });
+
+        res.cookie('jwt', token, { httpOnly: true, secure: false, maxAge: 3600000 });
+        return res.redirect('/menu-funcionario');
+      }
+    }
+
+    // Tenta como tutor
+    db.query('SELECT * FROM tutores WHERE email = ?', [email], (err, results) => {
+      if (err) {
+        console.error('Erro no servidor (tutor):', err);
+        return res.status(500).send('Erro no servidor');
+      }
+
+      if (results.length > 0) {
+        const tutor = results[0];
+        if (bcrypt.compareSync(senha, tutor.senha_hash)) {
+          const token = jwt.sign({
+            id: tutor.id,
+            email: tutor.email,
+            tipo: 'tutor'
+          }, JWT_SECRET, { expiresIn: '1h' });
+
+          res.cookie('jwt', token, { httpOnly: true, secure: false, maxAge: 3600000 });
+          return res.redirect('/menu-cliente');
+        }
+      }
+
+      // Nenhum encontrado
+      res.render('menu_inicial', { error: 'Credenciais inv├ílidas' });
+    });
+  });
+});
+
+// Rota GET - Mostra formul├írio de cadastro de tutor
+router.get('/cadastrar-tutor', (req, res) => {
+  res.render('cadastro_tutor', { error: null });
+});
+
+// Rota POST - Processa cadastro de tutor
+router.post('/cadastrar-tutor', (req, res) => {
+  const { nome, email, telefone, genero, morada, password } = req.body;
+
+  if (!nome || !email || !password) {
+    return res.render('cadastro_tutor', { error: 'Preencha nome, email e senha' });
+  }
+
+  const senhaHash = bcrypt.hashSync(password, 10);
+
+  db.query('INSERT INTO tutores (nome, email, telefone, genero, morada, senha_hash) VALUES (?, ?, ?, ?, ?, ?)',
+    [nome, email, telefone || null, genero || null, morada || null, senhaHash],
+    (err) => {
+      if (err) {
+        if (err.code === 'ER_DUP_ENTRY') {
+          return res.render('cadastro_tutor', { error: 'Este email j├í est├í cadastrado' });
+        }
+        console.error('Erro ao cadastrar tutor:', err);
+        return res.render('cadastro_tutor', { error: 'Erro ao cadastrar' });
+      }
+
+      res.redirect('/');
+    }
+  );
+});
+
+// Logout
+router.get('/logout', (req, res) => {
+  res.clearCookie('jwt');
+  res.redirect('/');
+});
+
+module.exports = router;
+
+===== backend/services/adminService.js =====
+const db = require('../config/db');
+
+const queryAsync = (sql, params) => new Promise((resolve, reject) => db.query(sql, params, (err, results) => err ? reject(err) : resolve(results)));
+
+const listUsuarios = async () => await queryAsync('SELECT * FROM usuarios');
+
+module.exports = { listUsuarios };
+
+===== backend/services/agendaService.js =====
+const db = require('../config/db');
+
+const queryAsync = (sql, params) => new Promise((resolve, reject) => db.query(sql, params, (err, results) => err ? reject(err) : resolve(results)));
+
+const agendarTratamento = async ({ tipo, descricao, data, animalId }) => {
+  await queryAsync('INSERT INTO tratamentos (tipo, descricao, data, animal_id) VALUES (?, ?, ?, ?)', [tipo, descricao, data, animalId]);
+};
+
+const agendarExame = async ({ tipo, resultados, data, animalId }) => {
+  await queryAsync('INSERT INTO exames (tipo, resultados, data, animal_id) VALUES (?, ?, ?, ?)', [tipo, resultados, data, animalId]);
+};
+
+const listarAgendamentos = async () => {
+  const tratamentos = await queryAsync('SELECT * FROM tratamentos JOIN animais ON tratamentos.animal_id = animais.id');
+  const exames = await queryAsync('SELECT * FROM exames JOIN animais ON exames.animal_id = animais.id');
+  return { tratamentos, exames };
+};
+
+const verAgendaTutor = async (tutorId) => {
+  return await queryAsync('SELECT * FROM animais WHERE tutor_id = ?', [tutorId]);
+};
+
+module.exports = { agendarTratamento, agendarExame, listarAgendamentos, verAgendaTutor };
+
+===== backend/services/animaisService.js =====
+const db = require('../config/db');
+const { classificarPrioridade } = require('../utils/classificador');
+
+const queryAsync = (sql, params) => new Promise((resolve, reject) => db.query(sql, params, (err, results) => err ? reject(err) : resolve(results)));
+
+const cadastrarAnimal = async ({ nome, idade, especie, sexo, peso, sintomas, gravidade }, tutorId, imagemPath) => {
+  const classif = classificarPrioridade(parseInt(idade), especie, parseInt(gravidade));
+  await queryAsync('INSERT INTO animais (nome, idade, especie, sexo, peso, sintomas, classif, tutor_id, imagem_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [nome, parseInt(idade), especie, sexo, parseFloat(peso), sintomas, classif, tutorId, imagemPath]);
+};
+
+const listarAnimaisPorTutor = async (tutorId) => await queryAsync('SELECT * FROM animais WHERE tutor_id = ?', [tutorId]);
+
+const darAltaAnimal = async (nome) => {
+  const [animal] = await queryAsync('SELECT id FROM animais WHERE nome = ?', [nome]);
+  if (!animal) throw 'N├úo encontrado';
+  await queryAsync('DELETE FROM animais WHERE id = ?', [animal.id]);
+};
+
+module.exports = { cadastrarAnimal, listarAnimaisPorTutor, darAltaAnimal };
+
+===== backend/services/authService.js =====
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const db = require('../config/db');
+const JWT_SECRET = 'seu-secret-super-seguro-aqui';
+
+const queryAsync = (sql, params) => new Promise((resolve, reject) => db.query(sql, params, (err, results) => err ? reject(err) : resolve(results)));
+
+const loginFuncionario = async (username, senha) => {
+  const [user] = await queryAsync('SELECT * FROM usuarios WHERE username = ?', [username]);
+  if (!user || !bcrypt.compareSync(senha, user.senha_hash)) throw 'Credenciais inv├ílidas';
+  const token = jwt.sign({ id: user.id, username: user.username, nivel: user.nivel, tipo: 'funcionario' }, JWT_SECRET, { expiresIn: '1h' });
+  return { token };
+};
+
+const loginTutor = async (email, senha) => {
+  const [tutor] = await queryAsync('SELECT * FROM tutores WHERE email = ?', [email]);
+  if (!tutor || !bcrypt.compareSync(senha, tutor.senha_hash)) throw 'Credenciais inv├ílidas';
+  const token = jwt.sign({ id: tutor.id, email: tutor.email, tipo: 'tutor' }, JWT_SECRET, { expiresIn: '1h' });
+  return { token };
+};
+
+const cadastrarTutor = async ({ nome, email, telefone, genero, morada, password }) => {
+  const senhaHash = bcrypt.hashSync(password, 10);
+  try {
+    await queryAsync('INSERT INTO tutores (nome, email, telefone, genero, morada, senha_hash) VALUES (?, ?, ?, ?, ?, ?)', [nome, email, telefone, genero, morada, senhaHash]);
+  } catch (err) {
+    throw err.code === 'ER_DUP_ENTRY' ? 'Email j├í cadastrado' : 'Erro no servidor';
+  }
+};
+
+
+
+module.exports = { loginFuncionario, loginTutor, cadastrarTutor };
+
+===== backend/services/relatoriosService.js =====
+const db = require('../config/db');
+
+const queryAsync = (sql, params) => new Promise((resolve, reject) => db.query(sql, params, (err, results) => err ? reject(err) : resolve(results)));
+
+const gerarRelatorios = async () => {
+  const [total] = await queryAsync('SELECT COUNT(*) AS total FROM animais');
+  const classifCount = await queryAsync('SELECT classif, COUNT(*) AS count FROM animais GROUP BY classif');
+  return { total: total.total, classifCount };
+};
+
+const sistemaManchester = async () => await queryAsync('SELECT * FROM animais ORDER BY classif DESC');
+
+module.exports = { gerarRelatorios, sistemaManchester };
+
+===== backend/utils/classificador.js =====
+const { LISTA_ESPECIES_EXOTICAS } = require('../especies');
+
+const classificarPrioridade = (idade, especie, gravidade) => {
+  let pontos = 0;
+  if (gravidade === 3) pontos += 3;
+  else if (gravidade === 2) pontos += 1;
+  if (idade < 1 || idade > 10) pontos += 1;
+  if (LISTA_ESPECIES_EXOTICAS.includes(especie)) pontos += 1;
+  return pontos >= 4 ? 'D' : pontos >= 3 ? 'C' : pontos >= 1 ? 'B' : 'A';
+};
+
+module.exports = { classificarPrioridade };
+
+===== frontend/public/css/style.css =====
+/* style.css - Tema VetSmart-inspired */
+
+:root {
+  --primary: #0d6efd;        /* Azul escuro */
+  --primary-dark: #0b5ed7;
+  --dark: #000;
+  --gray: #6c757d;
+  --light: #f8f9fa;
+  --white: #fff;
+  --shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+[data-bs-theme="dark"] {
+  --body-bg: #121212;
+  --text-color: #e0e0e0;
+  --sidebar-bg: #1e1e1e;
+  --card-bg: #1e1e1e;
+  --border-color: #333;
+}
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  background-color: var(--body-bg, var(--light));
+  color: var(--text-color, var(--dark));
+  transition: background-color 0.3s, color 0.3s;
+}
+
+.sidebar {
+  height: 100vh;
+  position: fixed;
+  width: 250px;
+  background-color: var(--sidebar-bg, var(--light));
+  border-right: 1px solid var(--border-color, #dee2e6);
+  padding: 1.5rem 1rem;
+  overflow-y: auto;
+  box-shadow: var(--shadow);
+}
+
+.sidebar h4 {
+  color: var(--primary);
+  font-weight: bold;
+  margin-bottom: 1.5rem;
+}
+
+.nav-link {
+  color: var(--dark, #000);
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  transition: all 0.2s;
+  margin: 0.25rem 0;
+}
+
+.nav-link:hover,
+.nav-link.active {
+  background-color: var(--primary);
+  color: white;
+}
+
+.content {
+  margin-left: 250px;
+  padding: 2rem;
+  min-height: 100vh;
+}
+
+.card {
+  border-radius: 1rem;
+  border: none;
+  box-shadow: var(--shadow);
+  background-color: var(--card-bg, white);
+}
+
+.btn-primary {
+  background-color: var(--primary);
+  border-color: var(--primary);
+  border-radius: 0.75rem;
+  padding: 0.75rem 1.5rem;
+}
+
+.btn-primary:hover {
+  background-color: var(--primary-dark);
+}
+
+.form-control, .form-select {
+  border-radius: 0.75rem;
+  border: 1px solid #ced4da;
+}
+
+.toggle-btn {
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 0.5rem;
+  transition: background 0.2s;
+}
+
+.toggle-btn:hover {
+  background: rgba(0, 123, 255, 0.1);
+}
+
+/* Responsividade */
+@media (max-width: 992px) {
+  .sidebar {
+    width: 100%;
+    height: auto;
+    position: relative;
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+  }
+  .content {
+    margin-left: 0;
+  }
+}
+
+===== frontend/public/js/app.js =====
+const express = require('express');
+const bodyParser = require('body-parser');
+const cookieParser = require('cookie-parser');
+const jwt = require('jsonwebtoken');
+const multer = require('multer');
+const path = require('path');
+const db = require('./config/db');
+const app = express();
+
+const JWT_SECRET = 'seu-secret-super-seguro-aqui';  // Mude para uma chave segura em produ├º├úo
+
+// Configura├º├úo EJS para views
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, '../frontend/views'));
+
+// Servir arquivos est├íticos (CSS, JS, imagens)
+app.use(express.static(path.join(__dirname, '../frontend/public')));
+
+// Parsers para body e cookies
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.json());
+app.use(cookieParser());
+
+// Configura├º├úo Multer para upload de imagens (para animais)
+const storage = multer.diskStorage({
+  destination: (_, __, cb) => cb(null, path.join(__dirname, '../frontend/public/images/animais')),
+  filename: (_, file, cb) => cb(null, Date.now() + '-' + file.originalname)
+});
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    cb(ext.match(/\.(jpg|jpeg|png)$/) ? null : new Error('S├│ JPG/JPEG/PNG'), true);
+  }
+});
+
+// Middleware JWT para rotas protegidas
+const verifyJWT = (req, res, next) => {
+  const token = req.cookies.jwt;
+  if (!token) return res.redirect('/');
+  try {
+    req.user = jwt.verify(token, JWT_SECRET);
+    next();
+  } catch {
+    res.clearCookie('jwt');
+    res.redirect('/');
+  }
+};
+
+// Rotas
+app.use('/auth', require('./routes/auth'));
+app.use('/animais', verifyJWT, require('./routes/animais'));
+app.use('/agenda', verifyJWT, require('./routes/agenda'));
+app.use('/relatorios', verifyJWT, require('./routes/relatorios'));
+
+// Rota inicial (menu inicial)
+app.get('/', (_, res) => res.render('menu_inicial'));
+
+// Menu funcion├írio (protegido)
+app.get('/menu-funcionario', verifyJWT, (req, res) => req.user.tipo === 'funcionario' ? res.render('menu_funcionario', { user: req.user }) : res.status(403).send('Proibido'));
+
+// Menu cliente (protegido)
+app.get('/menu-cliente', verifyJWT, (req, res) => req.user.tipo === 'tutor' ? res.render('menu_cliente', { user: req.user }) : res.status(403).send('Proibido'));
+
+// Inicia o servidor
+app.listen(3000, () => console.log('Server on 3000'));
+
+document.addEventListener('DOMContentLoaded', () => {
+  const body = document.body;
+  const toggle = document.getElementById('mode-toggle');
+
+  // Carrega tema salvo
+  if (localStorage.getItem('theme') === 'dark') {
+    body.setAttribute('data-bs-theme', 'dark');
+    toggle.innerHTML = '<i class="bi bi-sun-fill me-2"></i> Modo Claro';
+  }
+
+  toggle.addEventListener('click', () => {
+    if (body.getAttribute('data-bs-theme') === 'dark') {
+      body.setAttribute('data-bs-theme', 'light');
+      localStorage.setItem('theme', 'light');
+      toggle.innerHTML = '<i class="bi bi-moon-stars-fill me-2"></i> Modo Escuro';
+    } else {
+      body.setAttribute('data-bs-theme', 'dark');
+      localStorage.setItem('theme', 'dark');
+      toggle.innerHTML = '<i class="bi bi-sun-fill me-2"></i> Modo Claro';
+    }
+  });
+});
+
+// Exporta upload e verifyJWT para outros arquivos
+module.exports = { upload, verifyJWT };
+
+===== frontend/views/admin_criar_funcionario.ejs =====
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <title>Criar Funcion├írio</title>
+    <link rel="stylesheet" href="/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container mt-5">
+        <h2 class="text-center mb-4">Criar Novo Funcion├írio</h2>
+        <% if (typeof error !== 'undefined' && error) { %>
+            <div class="alert alert-danger" role="alert">
+                <%= error %>
+            </div>
+        <% } %>
+        <form action="/admin/criar-funcionario" method="POST">
+            <div class="mb-3">
+                <label for="username" class="form-label">Username</label>
+                <input type="text" name="username" id="username" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label for="senha" class="form-label">Senha</label>
+                <input type="password" name="senha" id="senha" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label for="nivel" class="form-label">N├¡vel</label>
+                <select name="nivel" id="nivel" class="form-select" required>
+                    <option value="funcionario">Funcion├írio</option>
+                    <option value="administrador">Administrador</option>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary w-100">Criar</button>
+        </form>
+    </div>
+</body>
+</html>
+
+===== frontend/views/agenda.ejs =====
+
+===== frontend/views/agendar_tratamento.ejs =====
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <title>Agendar Tratamento</title>
+    <link rel="stylesheet" href="/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container mt-5">
+        <h2 class="text-center mb-4">Agendar Tratamento</h2>
+        <form action="/agenda/agendar-tratamento" method="POST">
+            <div class="mb-3">
+                <label for="nome_animal" class="form-label">Nome do Animal</label>
+                <input type="text" name="nome_animal" id="nome_animal" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label for="tipo" class="form-label">Tipo de Tratamento</label>
+                <input type="text" name="tipo" id="tipo" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label for="descricao" class="form-label">Descri├º├úo</label>
+                <textarea name="descricao" id="descricao" class="form-control" required></textarea>
+            </div>
+            <div class="mb-3">
+                <label for="data" class="form-label">Data (DD/MM/AAAA)</label>
+                <input type="text" name="data" id="data" class="form-control" required>
+            </div>
+            <button type="submit" class="btn btn-primary w-100">Agendar</button>
+        </form>
+    </div>
+</body>
+</html>
+
+===== frontend/views/alterar_senha.ejs =====
+<!DOCTYPE html>
+<html lang="pt">
+<head><title>Alterar Senha</title><link rel="stylesheet" href="/css/bootstrap.min.css"></head>
+<body><div class="container mt-5"><h2>Alterar Senha</h2>
+<% if (error) { %><p class="alert alert-danger"><%= error %></p><% } %>
+<form action="/auth/alterar-senha" method="POST">
+<input type="password" name="senhaAtual" placeholder="Senha atual" class="form-control" required>
+<input type="password" name="senhaNova" placeholder="Nova senha" class="form-control" required>
+<button type="submit" class="btn btn-primary">Alterar</button></form></div></body></html>
+
+===== frontend/views/cadastro_animal.ejs =====
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <title>Cadastrar Animal</title>
+    <link rel="stylesheet" href="/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container mt-5">
+        <h2 class="text-center mb-4">Cadastrar Animal</h2>
+        <form action="/animais/cadastrar-animal" method="POST" enctype="multipart/form-data">
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="nome" class="form-label">Nome do animal</label>
+                    <input type="text" name="nome" id="nome" class="form-control" required>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="idade" class="form-label">Idade (em anos)</label>
+                    <input type="number" name="idade" id="idade" class="form-control" min="0" required>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="especie" class="form-label">Esp├®cie</label>
+                    <select name="especie" id="especie" class="form-select" required>
+                        <% especies.forEach(esp => { %>
+                            <option value="<%= esp %>"><%= esp %></option>
+                        <% }); %>
+                    </select>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="raca" class="form-label">Ra├ºa</label>
+                    <input type="text" name="raca" id="raca" class="form-control">
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="sexo" class="form-label">Sexo</label>
+                    <select name="sexo" id="sexo" class="form-select" required>
+                        <option value="Macho">Macho</option>
+                        <option value="F├¬mea">F├¬mea</option>
+                    </select>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="peso" class="form-label">Peso (kg)</label>
+                    <input type="number" name="peso" id="peso" class="form-control" step="0.01" min="0" required>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label for="sintomas" class="form-label">Sintomas principais (descreva detalhadamente)</label>
+                <textarea name="sintomas" id="sintomas" class="form-control" rows="4" placeholder="Ex: Vomito, diarreia, falta de apetite h├í 2 dias..." required></textarea>
+            </div>
+
+            <div class="mb-3">
+                <label for="vacinas" class="form-label">Hist├│rico de vacinas (opcional)</label>
+                <textarea name="vacinas" id="vacinas" class="form-control" rows="2" placeholder="Ex: Vacina antirr├íbica em 01/2023"></textarea>
+            </div>
+
+            <div class="mb-3">
+                <label for="historico" class="form-label">Hist├│rico m├®dico anterior (opcional)</label>
+                <textarea name="historico" id="historico" class="form-control" rows="3" placeholder="Ex: Cirurgia em 2022, alergia a medicamento X"></textarea>
+            </div>
+
+            <div class="mb-3">
+                <label for="gravidade" class="form-label">Gravidade dos sintomas</label>
+                <select name="gravidade" id="gravidade" class="form-select" required>
+                    <option value="1" selected>Leve (animal come e brinca normalmente)</option>
+                    <option value="2">Moderado (animal est├í abatido, mas responde)</option>
+                    <option value="3">Grave (animal n├úo come, est├í muito abatido)</option>
+                </select>
+            </div>
+
+            <div class="mb-4">
+                <label for="imagem" class="form-label">Foto do animal (opcional, JPG/PNG, max 5MB)</label>
+                <input type="file" name="imagem" id="imagem" class="form-control" accept="image/jpeg, image/png">
+            </div>
+
+            <button type="submit" class="btn btn-primary w-100">Cadastrar Animal</button>
+        </form>
+    </div>
+</body>
+</html>
+
+===== frontend/views/detalhes_animal.ejs =====
+<!DOCTYPE html>
+<html lang="pt">
+<head><title>Cadastro Animal</title><link rel="stylesheet" href="/css/bootstrap.min.css"></head>
+<body><div class="container"><h2>Cadastrar Animal</h2>
+<form action="/animais/cadastrar-animal" method="POST" enctype="multipart/form-data">
+<input type="text" name="nome" placeholder="Nome do animal" required>
+<input type="number" name="idade" placeholder="Idade" required>
+<select name="especie"><% especies.forEach(esp => { %><option value="<%= esp %>"><%= esp %></option><% }); %></select>
+<input type="text" name="sexo" placeholder="Sexo (Macho/F├¬mea)" required>
+<input type="number" name="peso" placeholder="Peso (kg)" required>
+<textarea name="sintomas" placeholder="Sintomas"></textarea>
+<select name="gravidade"><option value="1">Leve</option><option value="2">Moderado</option><option value="3">Grave</option></select>
+<input type="file" name="imagem" accept="image/*">
+<button type="submit">Cadastrar</button></form>
+<script src="/js/app.js"></script></div></body></html>
+
+===== frontend/views/menu_cliente.ejs =====
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cl├¡nica Vet Pata-Node</title>
+    <link rel="stylesheet" href="/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body data-bs-theme="light">
+    <div class="container mt-5">
+        <div class="row justify-content-center">
+            <div class="col-lg-6 col-md-8">
+                <div class="card shadow-lg border-0 rounded-4">
+                    <div class="card-body p-5">
+                        <h2 class="text-center mb-4 fw-bold text-primary">Bem-vindo ├á Cl├¡nica Vet Pata-Node</h2>
+
+                        <ul class="nav nav-tabs nav-fill mb-4" id="authTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active rounded-3" id="login-tab" data-bs-toggle="tab" data-bs-target="#login" type="button" role="tab" aria-controls="login" aria-selected="true">
+                                    <i class="bi bi-box-arrow-in-right me-2"></i> Login
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link rounded-3" id="cadastro-tab" data-bs-toggle="tab" data-bs-target="#cadastro" type="button" role="tab" aria-controls="cadastro" aria-selected="false">
+                                    <i class="bi bi-person-plus me-2"></i> Cadastro
+                                </button>
+                            </li>
+                        </ul>
+
+                        <div class="tab-content" id="authTabsContent">
+                            <!-- Tab Login -->
+                            <div class="tab-pane fade show active" id="login" role="tabpanel" aria-labelledby="login-tab">
+                                <form action="/auth/login" method="POST">
+                                    <div class="mb-3">
+                                        <label for="email" class="form-label fw-semibold">Email ou Username</label>
+                                        <div class="input-group">
+                                            <span class="input-group-text"><i class="bi bi-person"></i></span>
+                                            <input type="text" name="email" id="email" class="form-control rounded-3" required>
+                                        </div>
+                                    </div>
+                                    <div class="mb-4">
+                                        <label for="senha" class="form-label fw-semibold">Senha</label>
+                                        <div class="input-group">
+                                            <span class="input-group-text"><i class="bi bi-lock"></i></span>
+                                            <input type="password" name="senha" id="senha" class="form-control rounded-3" required>
+                                        </div>
+                                    </div>
+                                    <button type="submit" class="btn btn-primary w-100 rounded-3 py-3 fw-bold">Entrar</button>
+                                </form>
+                            </div>
+
+                            <!-- Tab Cadastro -->
+                            <div class="tab-pane fade" id="cadastro" role="tabpanel" aria-labelledby="cadastro-tab">
+                                <form action="/auth/cadastrar-tutor" method="POST">
+                                    <div class="mb-3">
+                                        <label for="nome" class="form-label fw-semibold">Nome completo</label>
+                                        <input type="text" name="nome" id="nome" class="form-control rounded-3" required>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="email" class="form-label fw-semibold">Email</label>
+                                        <input type="email" name="email" id="email" class="form-control rounded-3" required>
+                                    </div>
+                                    <div class="mb-4">
+                                        <label for="password" class="form-label fw-semibold">Senha</label>
+                                        <input type="password" name="password" id="password" class="form-control rounded-3" required>
+                                    </div>
+                                    <button type="submit" class="btn btn-success w-100 rounded-3 py-3 fw-bold">Cadastrar</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/app.js"></script>
+</body>
+</html>
+
+===== frontend/views/menu_funcionario.ejs =====
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Menu Funcion├írio</title>
+    <link rel="stylesheet" href="/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body data-bs-theme="light">
+    <div class="sidebar">
+        <h4 class="text-primary fw-bold">Vet Pata-Node</h4>
+        <ul class="nav flex-column">
+            <li class="nav-item">
+                <a class="nav-link active" href="/animais/cadastrar-animal">
+                    <i class="bi bi-plus-circle me-2"></i> Cadastrar Animal
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="/agenda/agendar-tratamento">
+                    <i class="bi bi-calendar-event me-2"></i> Agendar Tratamento
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="/relatorios/gerar-relatorios">
+                    <i class="bi bi-bar-chart me-2"></i> Relat├│rios
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="/admin/criar-funcionario">
+                    <i class="bi bi-person-plus me-2"></i> Criar Funcion├írio
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="/auth/logout">
+                    <i class="bi bi-box-arrow-right me-2"></i> Sair
+                </a>
+            </li>
+        </ul>
+        <hr>
+        <div class="toggle-btn d-flex align-items-center" id="mode-toggle">
+            <i class="bi bi-moon-stars-fill me-2"></i> Modo Escuro
+        </div>
+    </div>
+
+    <div class="content">
+        <h2 class="mb-4">Bem-vindo, <%= user.username %></h2>
+        <!-- Conte├║do da p├ígina aqui -->
+    </div>
+
+    <script src="/js/app.js"></script>
+</body>
+</html>
+
+===== frontend/views/menu_inicial.ejs =====
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <title>Cl├¡nica Vet</title>
+    <link rel="stylesheet" href="/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container mt-5">
+        <h1 class="text-center mb-4">Bem-vindo ├á Cl├¡nica Vet Pata-Node</h1>
+        <div class="card mx-auto" style="max-width: 400px;">
+            <div class="card-body">
+                <h2 class="card-title text-center">Login</h2>
+                <form action="/auth/login" method="POST">
+                    <div class="mb-3">
+                        <label for="email" class="form-label">Email ou Username</label>
+                        <input type="text" name="email" id="email" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="senha" class="form-label">Senha</label>
+                        <input type="password" name="senha" id="senha" class="form-control" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Entrar</button>
+                </form>
+                <p class="text-center mt-3">
+                    N├úo tem conta? <a href="/auth/cadastrar-tutor">Cadastre-se</a>
+                </p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+
+===== frontend/views/perfil.ejs =====
+<!DOCTYPE html>
+<html lang="pt">
+<head><title>Perfil</title><link rel="stylesheet" href="/css/bootstrap.min.css"></head>
+<body><div class="container mt-5"><h2>Perfil de <%= user.username %></h2>
+<form action="/auth/editar-perfil" method="POST">
+<input type="text" name="nome" value="<%= user.nome %>" class="form-control" required>
+<button type="submit" class="btn btn-primary">Salvar</button></form></div></body></html>
+
+===== frontend/views/prontuarios.ejs =====
+
+===== frontend/views/relatorios.ejs =====
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <title>Relat├│rios</title>
+    <link rel="stylesheet" href="/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container">
+        <h2>Relat├│rios</h2>
+        <% if (typeof total !== 'undefined' && total !== null) { %>
+            <p>Total de animais: <%= total %></p>
+        <% } %>
+        <% if (typeof classifCount !== 'undefined' && classifCount !== null) { %>
+            <h3>Distribui├º├úo por classifica├º├úo</h3>
+            <table class="table">
+                <tr><th>Classifica├º├úo</th><th>Contagem</th></tr>
+                <% classifCount.forEach(c => { %>
+                    <tr><td><%= c.classif %></td><td><%= c.count %></td></tr>
+                <% }); %>
+            </table>
+        <% } %>
+        <% if (typeof animais !== 'undefined' && animais !== null) { %>
+            <h3>Sistema Manchester</h3>
+            <% animais.forEach(a => { %>
+                <p><%= a.nome %> - <%= a.classif %></p>
+            <% }); %>
+        <% } %>
+    </div>
+</body>
+</html>
+

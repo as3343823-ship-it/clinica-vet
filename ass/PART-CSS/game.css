@@ -1,0 +1,260 @@
+/* Tema Verde e Branco para a página do Jogo */
+
+body {
+    /* Define fontes padrão do sistema */
+    font-family: Arial, Helvetica, sans-serif;
+    background-color: #f0fdf4; /* Fundo verde-claro (green-50) */
+    color: #14532d; /* Texto verde-escuro (green-900) */
+    display: flex;
+    justify-content: center;
+    align-items: flex-start; /* Alinha no topo */
+    min-height: 100vh;
+    padding: 1rem;
+    box-sizing: border-box;
+    margin: 0;
+}
+
+.container {
+    max-width: 700px; /* Um pouco maior para o tabuleiro */
+    width: 100%;
+    background-color: #ffffff;
+    padding: 1.5rem;
+    border-radius: 12px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+}
+
+/* Placar */
+#scoreboard {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    background-color: #f9fafb; /* gray-50 */
+    padding: 1rem;
+    border-radius: 8px;
+}
+
+.score-player, .timer {
+    width: 33.3%;
+    text-align: center;
+}
+
+.score-name {
+    display: block;
+    font-weight: 700;
+    font-size: 1rem;
+    margin-bottom: 0.25rem;
+    white-space: nowrap; /* Impede que os nomes quebrem linha */
+    overflow: hidden; /* Esconde o que transbordar */
+    text-overflow: ellipsis; /* Adiciona '...' se o nome for muito longo */
+}
+
+.player-x .score-name { color: #15803d; } /* green-700 */
+.player-o .score-name { color: #be123c; } /* rose-700 */
+
+.score-value {
+    font-size: 2.5rem;
+    font-weight: 900;
+    line-height: 1;
+}
+
+.player-x .score-value { color: #15803d; }
+.player-o .score-value { color: #be123c; }
+
+.timer-label {
+    display: block;
+    font-weight: 700;
+    font-size: 1rem;
+    color: #374151; /* gray-700 */
+}
+.timer-value {
+    font-size: 2.5rem;
+    font-weight: 900;
+    color: #1f2937; /* gray-800 */
+}
+
+/* Info de Turno */
+#turn-info {
+    font-size: 1.75rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+    text-align: center;
+}
+
+/* Tabuleiro */
+.game-board-container {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    padding: 8px;
+    background: #166534; /* green-800 */
+    border-radius: 12px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1) inset;
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+/* Célula Grande (Quadrante) */
+.big-cell {
+    background-color: #f0fdf4; /* green-50 */
+    border: 2px solid #166534; /* green-800 */
+    border-radius: 8px;
+    padding: 4px;
+    transition: all 0.3s ease;
+    position: relative;
+    aspect-ratio: 1/1; /* Garante que seja quadrado */
+}
+
+/* Destaque do quadrante ativo */
+.big-cell.active-board {
+    box-shadow: 0 0 20px 5px #b80000; /* green-600 */
+    border-color: #16a34a; /* green-600 */
+    background-color: #dcfce7; /* green-100 */
+}
+
+/* Destaque de jogada livre */
+.big-cell.free-play:not(.won-x):not(.won-o):not(.draw) {
+    box-shadow: 0 0 20px 5px #facc15; /* yellow-400 */
+    cursor: pointer;
+}
+
+/* Tabuleiro Pequeno */
+.small-board {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+    height: 100%;
+}
+
+/* Célula Pequena */
+.small-cell {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    background-color: #ffffff;
+    border: 2px solid #bbf7d0; /* green-200 */
+    border-radius: 6px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: clamp(1rem, 10vw, 2.5rem); /* Fonte responsiva */
+    font-weight: 900;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.small-cell:hover {
+    background-color: #f0fdf4; /* green-50 */
+}
+
+/* Marcas X e O */
+.text-x { color: #15803d; } /* green-700 */
+.text-o { color: #be123c; } /* rose-700 */
+
+/* Estilos de Quadrante Vencido */
+.big-cell.won-x, .big-cell.won-o, .big-cell.draw {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.big-cell.won-x::after, .big-cell.won-o::after {
+    content: '';
+    /* Fonte gigante responsiva para o X ou O de vitória */
+    font-size: clamp(3rem, 20vw, 8rem);
+    font-weight: 900;
+    opacity: 0.8;
+    line-height: 1;
+    position: absolute;
+}
+
+.big-cell.won-x { background-color: #dcfce7; } /* green-100 */
+.big-cell.won-x::after {
+    content: 'X';
+    color: #15803d; /* green-700 */
+}
+
+.big-cell.won-o { background-color: #ffe4e6; } /* rose-100 */
+.big-cell.won-o::after {
+    content: 'O';
+    color: #be123c; /* rose-700 */
+}
+
+.big-cell.draw {
+    background-color: #e5e7eb; /* gray-200 */
+    opacity: 0.7;
+}
+
+/* Esconde o tabuleiro pequeno quando o quadrante é vencido */
+.big-cell.won-x .small-board,
+.big-cell.won-o .small-board,
+.big-cell.draw .small-board {
+    display: none;
+}
+
+#game-board.game-over {
+    pointer-events: none; /* Desativa cliques no tabuleiro */
+    opacity: 0.8;
+}
+
+/* Controles */
+.controls {
+    margin-top: 1.5rem;
+    text-align: center;
+}
+
+.btn {
+    width: 100%;
+    background-color: #16a34a; /* green-600 */
+    color: #ffffff;
+    font-weight: 700;
+    font-size: 1.1rem;
+    padding: 0.85rem 1.5rem;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+.btn:hover {
+    background-color: #15803d; /* green-700 */
+}
+
+.btn-secondary {
+    background-color: #6b7280; /* gray-500 */
+}
+.btn-secondary:hover {
+    background-color: #4b5563; /* gray-600 */
+}
+
+
+/* Modal de Mensagem */
+.modal-overlay {
+    position: fixed;
+    inset: 0; /* Cobre a tela inteira */
+    background: rgba(0, 0, 0, 0.75);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 1rem;
+    z-index: 100;
+}
+
+.modal-content {
+    background: #ffffff;
+    padding: 2rem;
+    border-radius: 12px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    text-align: center;
+    max-width: 400px;
+    width: 100%;
+}
+
+.modal-content h2 {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: #1f2937; /* gray-800 */
+    margin-bottom: 1.5rem;
+}
+
+.hidden {
+    display: none;
+}

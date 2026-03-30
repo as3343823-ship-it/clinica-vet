@@ -40,18 +40,50 @@ const handleAlterarSenha = async (req, res) => {
   const { senhaAtual, senhaNova } = req.body;
 
   try {
-    const user = await getUserById(req.user.id);
-    if (!bcrypt.compareSync(senhaAtual, user.senha_hash)) {
+    const user = await getUserById(req.user.tipo, req.user.id);
+    if (!user || !bcrypt.compareSync(senhaAtual, user.senha_hash)) {
       throw 'Senha atual inválida';
     }
 
     const novoHash = bcrypt.hashSync(senhaNova, 10);
-    await updateSenha(user.id, novoHash);
+    await updateSenha(req.user.tipo, user.id, novoHash);
 
-    res.redirect('/perfil');
+    res.redirect('/auth/perfil');
   } catch (error) {
-    res.render('alterar_senha', { error: error || 'Erro ao alterar senha' });
+    res.render('alterar_senha', { user: req.user, error: error || 'Erro ao alterar senha' });
   }
 };
 
-module.exports = { handleLoginFuncionario, handleLoginTutor, handleCadastrarTutor, handleAlterarSenha };
+const handleVerPerfil = async (req, res) => {
+  const user = await getUserById(req.user.tipo, req.user.id);
+  const profile = user ? { ...req.user, ...user } : req.user;
+  res.render('perfil', { user: profile, error: null });
+};
+
+const handleEditarPerfil = async (req, res) => {
+  try {
+    const user = await getUserById(req.user.tipo, req.user.id);
+    if (!user) throw new Error('Usuário não encontrado');
+    const { nome } = req.body;
+    if (req.user.tipo === 'tutor' && nome) {
+      const db = require('../config/db');
+      const queryAsync = (sql, params) => new Promise((resolve, reject) => {
+        db.query(sql, params, (err, r) => (err ? reject(err) : resolve(r)));
+      });
+      await queryAsync('UPDATE tutores SET nome = ? WHERE id = ?', [nome, req.user.id]);
+    }
+    res.redirect('/auth/perfil');
+  } catch (error) {
+    const profile = await getUserById(req.user.tipo, req.user.id).catch(() => req.user);
+    res.render('perfil', { user: profile || req.user, error: error || 'Erro ao atualizar perfil' });
+  }
+};
+
+module.exports = {
+  handleLoginFuncionario,
+  handleLoginTutor,
+  handleCadastrarTutor,
+  handleAlterarSenha,
+  handleVerPerfil,
+  handleEditarPerfil
+};

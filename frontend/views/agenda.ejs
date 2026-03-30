@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agenda | Vet Pata-Node</title>
+  <link rel="stylesheet" href="/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body data-bs-theme="light">
+  <div class="app-shell">
+    <%- include('partials/sidebar') %>
+    <main class="content">
+      <div class="content-page">
+    <% const listaTratamentos = Array.isArray(tratamentos) ? tratamentos : []; %>
+    <% const listaExames = Array.isArray(exames) ? exames : []; %>
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
+            <h2 class="mb-0"><%= isTutor ? 'Agenda dos seus animais' : 'Agenda da clínica' %></h2>
+            <div class="d-flex gap-2">
+              <% if (!isTutor) { %>
+                <a class="btn btn-primary" href="/agenda/agendar-tratamento"><i class="bi bi-plus-circle me-1"></i> Novo tratamento</a>
+              <% } %>
+              <a class="btn btn-outline-secondary" href="<%= isTutor ? '/menu-cliente' : '/menu-funcionario' %>">Voltar</a>
+            </div>
+        </div>
+
+        <div class="row g-4">
+            <div class="col-lg-6">
+                <div class="card">
+                  <div class="card-body">
+                <h5 class="card-title mb-4"><i class="bi bi-heart-pulse me-2"></i>Tratamentos</h5>
+                <% if (!listaTratamentos.length) { %>
+                    <p class="text-muted">Nenhum tratamento agendado.</p>
+                <% } else { %>
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Animal</th>
+                                <th>Tipo</th>
+                                <th>Data</th>
+                                <% if (!isTutor) { %><th>Tutor</th><% } %>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <% listaTratamentos.forEach(t => { %>
+                                <tr>
+                                    <td><%= t.animal_nome %></td>
+                                    <td><%= t.tipo %></td>
+                                    <td><%= t.data %></td>
+                                    <% if (!isTutor) { %><td><%= t.tutor_nome %></td><% } %>
+                                </tr>
+                            <% }) %>
+                        </tbody>
+                    </table>
+                <% } %>
+                  </div>
+                </div>
+            </div>
+            <div class="col-lg-6">
+                <div class="card">
+                  <div class="card-body">
+                <h5 class="card-title mb-4"><i class="bi bi-clipboard-pulse me-2"></i>Exames</h5>
+                <% if (!listaExames.length) { %>
+                    <p class="text-muted">Nenhum exame agendado.</p>
+                <% } else { %>
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Animal</th>
+                                <th>Tipo</th>
+                                <th>Data</th>
+                                <% if (!isTutor) { %><th>Tutor</th><% } %>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <% listaExames.forEach(e => { %>
+                                <tr>
+                                    <td><%= e.animal_nome %></td>
+                                    <td><%= e.tipo %></td>
+                                    <td><%= e.data %></td>
+                                    <% if (!isTutor) { %><td><%= e.tutor_nome %></td><% } %>
+                                </tr>
+                            <% }) %>
+                        </tbody>
+                    </table>
+                <% } %>
+                  </div>
+                </div>
+            </div>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script src="/js/app.js"></script>
+</body>
+</html>

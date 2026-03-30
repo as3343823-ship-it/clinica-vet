@@ -1,81 +1,51 @@
 <!DOCTYPE html>
 <html lang="pt">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Clínica Vet Pata-Node</title>
-    <link rel="stylesheet" href="/css/bootstrap.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-    <link rel="stylesheet" href="/css/style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Área do Cliente | Vet Pata-Node</title>
+  <link rel="stylesheet" href="/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="/css/style.css">
 </head>
 <body data-bs-theme="light">
-    <div class="container mt-5">
-        <div class="row justify-content-center">
-            <div class="col-lg-6 col-md-8">
-                <div class="card shadow-lg border-0 rounded-4">
-                    <div class="card-body p-5">
-                        <h2 class="text-center mb-4 fw-bold text-primary">Bem-vindo à Clínica Vet Pata-Node</h2>
+  <% const lista = Array.isArray(animais) ? animais : []; %>
+  <div class="app-shell">
+    <%- include('partials/sidebar') %>
+    <main class="content">
+        <h2 class="mb-3">Olá, <%= (typeof user !== 'undefined' && user) ? (user.email || user.username || 'Cliente') : 'Cliente' %></h2>
+        <p class="lead">Aqui voce e gerencia apenas os seus animais.</p>
 
-                        <ul class="nav nav-tabs nav-fill mb-4" id="authTabs" role="tablist">
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link active rounded-3" id="login-tab" data-bs-toggle="tab" data-bs-target="#login" type="button" role="tab" aria-controls="login" aria-selected="true">
-                                    <i class="bi bi-box-arrow-in-right me-2"></i> Login
-                                </button>
-                            </li>
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link rounded-3" id="cadastro-tab" data-bs-toggle="tab" data-bs-target="#cadastro" type="button" role="tab" aria-controls="cadastro" aria-selected="false">
-                                    <i class="bi bi-person-plus me-2"></i> Cadastro
-                                </button>
-                            </li>
-                        </ul>
-
-                        <div class="tab-content" id="authTabsContent">
-                            <!-- Tab Login -->
-                            <div class="tab-pane fade show active" id="login" role="tabpanel" aria-labelledby="login-tab">
-                                <form action="/auth/login" method="POST">
-                                    <div class="mb-3">
-                                        <label for="email" class="form-label fw-semibold">Email ou Username</label>
-                                        <div class="input-group">
-                                            <span class="input-group-text"><i class="bi bi-person"></i></span>
-                                            <input type="text" name="email" id="email" class="form-control rounded-3" required>
-                                        </div>
+        <div class="card shadow-sm border-0 rounded-4">
+            <div class="card-body">
+                <h5 class="card-title mb-3">Meus animais</h5>
+                <% if (!lista.length) { %>
+                    <p class="mb-0">Ainda ainda não tem animais cadastrados para sua conta.</p>
+                <% } else { %>
+                    <div class="row g-3">
+                        <% lista.forEach(animal => { %>
+                            <div class="col-md-6 col-lg-4">
+                                <div class="card h-100">
+                                    <% if (animal.imagem_path) { %>
+                                        <img src="<%= animal.imagem_path %>" class="card-img-top" alt="Foto de <%= animal.nome %>" style="height:180px;object-fit:cover;">
+                                    <% } %>
+                                    <div class="card-body">
+                                        <h6 class="card-title mb-1"><%= animal.nome %></h6>
+                                        <p class="mb-1"><strong>Espécie:</strong> <%= animal.especie %></p>
+                                        <p class="mb-1"><strong>Classificação:</strong> <%= animal.classif %></p>
+                                        <p class="mb-1"><strong>Pontuação:</strong> <%= animal.pontuario %></p>
+                                        <p class="mb-2"><strong>Status:</strong> Em acompanhamento</p>
+                                        <a class="btn btn-sm btn-outline-primary" href="/animais/prontuario-clinico/<%= animal.id %>">Ver prontuário</a>
                                     </div>
-                                    <div class="mb-4">
-                                        <label for="senha" class="form-label fw-semibold">Senha</label>
-                                        <div class="input-group">
-                                            <span class="input-group-text"><i class="bi bi-lock"></i></span>
-                                            <input type="password" name="senha" id="senha" class="form-control rounded-3" required>
-                                        </div>
-                                    </div>
-                                    <button type="submit" class="btn btn-primary w-100 rounded-3 py-3 fw-bold">Entrar</button>
-                                </form>
+                                </div>
                             </div>
-
-                            <!-- Tab Cadastro -->
-                            <div class="tab-pane fade" id="cadastro" role="tabpanel" aria-labelledby="cadastro-tab">
-                                <form action="/auth/cadastrar-tutor" method="POST">
-                                    <div class="mb-3">
-                                        <label for="nome" class="form-label fw-semibold">Nome completo</label>
-                                        <input type="text" name="nome" id="nome" class="form-control rounded-3" required>
-                                    </div>
-                                    <div class="mb-3">
-                                        <label for="email" class="form-label fw-semibold">Email</label>
-                                        <input type="email" name="email" id="email" class="form-control rounded-3" required>
-                                    </div>
-                                    <div class="mb-4">
-                                        <label for="password" class="form-label fw-semibold">Senha</label>
-                                        <input type="password" name="password" id="password" class="form-control rounded-3" required>
-                                    </div>
-                                    <button type="submit" class="btn btn-success w-100 rounded-3 py-3 fw-bold">Cadastrar</button>
-                                </form>
-                            </div>
-                        </div>
+                        <% }) %>
                     </div>
-                </div>
+                <% } %>
             </div>
         </div>
-    </div>
-
-    <script src="/js/app.js"></script>
+    </main>
+  </div>
+  <script src="/js/app.js"></script>
 </body>
 </html>

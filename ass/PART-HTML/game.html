@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title> ROGER GAME</title>
+    
+    <link rel="stylesheet" href="../PART-CSS/game.css">
+</head>
+<body>
+
+    <div class="container">
+        
+        <div id="scoreboard">
+            <div class="score-player player-x">
+                <span id="player1-score-name" class="score-name">Jogador Verde</span>
+                <span id="player1-score" class="score-value">0</span>
+            </div>
+            <div class="timer">
+                 <span class="timer-label">TEMPO</span>
+                 <span id="timer-display" class="timer-value">--:--</span>
+            </div>
+            <div class="score-player player-o">
+                <span id="player2-score-name" class="score-name">Jogador Rosa</span>
+                <span id="player2-score" class="score-value">0</span>
+            </div>
+        </div>
+
+        <h2 id="turn-info">Vez de: ...</h2>
+
+        <div id="game-board" class="game-board-container">
+            
+        </div>
+
+        <div class="controls">
+            <button id="btn-new-game" class="btn btn-secondary">Novo Jogo</button>
+        </div>
+    </div>
+
+    <div id="message-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2 id="message-text">...</h2>
+            <button id="btn-play-again" class="btn">Jogar Novamente</button>
+        </div>
+    </div>
+
+    <script src="../PART-JS/game.js"></script>
+</body>
+</html>

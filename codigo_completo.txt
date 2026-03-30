@@ -1,0 +1,1398 @@
+===== RELATORIO_ESTRUTURA_CLASSES.md =====
+
+===== RELATORIO_OBJETIVO_PROJETO.md =====
+
+===== backend/app.js =====
+const express = require('express');
+const bodyParser = require('body-parser');
+const cookieParser = require('cookie-parser');
+const path = require('path');
+const multer = require('multer');
+const db = require('./config/db');
+const { verifyJWT } = require('./middleware/auth');
+
+const {
+  handleLoginFuncionario,
+  handleLoginTutor,
+  handleCadastrarTutor,
+  handleAlterarSenha
+} = require('./controllers/authController');
+
+const app = express();
+
+
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, '../frontend/views'));
+app.use(express.static(path.join(__dirname, '../frontend/public')));
+
+// Arquivos estÃ¡ticos (CSS, JS, imagens)
+app.use(express.static(path.join(__dirname, '../frontend/public')));
+
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.json());
+app.use(cookieParser());
+
+// Multer para upload de imagens
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, path.join(__dirname, '../frontend/public/images/animais')),
+  filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname)
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (ext !== '.jpg' && ext !== '.jpeg' && ext !== '.png') return cb(new Error('Apenas JPG/JPEG/PNG'));
+    cb(null, true);
+  }
+});
+
+
+// Rotas
+app.use('/auth', require('./routes/auth'));
+app.use('/animais', verifyJWT, require('./routes/animais'));
+app.use('/agenda', verifyJWT, require('./routes/agenda'));
+app.use('/relatorios', verifyJWT, require('./routes/relatorios'));
+app.use('/admin', verifyJWT, require('./routes/admin'));
+
+app.get('/', (req, res) => res.render('menu_inicial', { user: {}, activeTab: 'login', formData: {}, error: null }));
+
+app.get('/menu-funcionario', verifyJWT, (req, res) => {
+  if (req.user.tipo !== 'funcionario') return res.status(403).send('Acesso negado');
+  return res.redirect('/animais/lista-completa');
+});
+
+app.get('/menu-cliente', verifyJWT, (req, res) => {
+  if (req.user.tipo !== 'tutor') return res.status(403).send('Acesso negado');
+  return res.redirect('/animais/listar-animais');
+});
+
+app.listen(3000, () => console.log('Server on 3000'));
+module.exports = { 
+  upload, 
+  
+}; 
+
+===== backend/controllers/adminController.js =====
+const { listUsuarios } = require('../services/adminService');
+
+const handleListarUsuarios = async (req, res) => {
+  if (req.user.nivel !== 'administrador') return res.status(403).send('Acesso negado');
+
+  try {
+    const usuarios = await listUsuarios();
+    return res.json(usuarios);
+  } catch (error) {
+    return res.status(500).send('Erro ao listar usuÃ¡rios');
+  }
+};
+
+module.exports = { handleListarUsuarios };
+
+===== backend/controllers/agendaController.js =====
+const {
+  agendarTratamento,
+  agendarExame,
+  listarAnimaisParaAgendamento,
+  listarAgendamentos,
+  verAgendaTutor
+} = require('../services/agendaService');
+
+const showAgendarTratamento = async (req, res) => {
+  if (req.user.tipo !== 'funcionario') return res.status(403).send('Proibido');
+
+  try {
+    const animais = await listarAnimaisParaAgendamento();
+    return res.render('agendar_tratamento', { user: req.user, animais, error: null });
+  } catch (error) {
+    return res.status(500).send('Erro ao carregar formulÃ¡rio de agendamento');
+  }
+};
+
+const handleAgendarTratamento = async (req, res) => {
+  if (req.user.tipo !== 'funcionario') return res.status(403).send('Proibido');
+
+  try {
+    await agendarTratamento(req.body);
+    return res.redirect('/agenda/ver-agenda');
+  } catch (error) {
+    return res.status(500).send('Erro ao agendar tratamento');
+  }
+};
+
+const handleAgendarExame = async (req, res) => {
+  if (req.user.tipo !== 'funcionario') return res.status(403).send('Proibido');
+
+  try {
+    await agendarExame(req.body);
+    return res.redirect('/agenda/ver-agenda');
+  } catch (error) {
+    return res.status(500).send('Erro ao agendar exame');
+  }
+};
+
+const handleListarAgendamentos = async (req, res) => {
+  if (req.user.tipo !== 'funcionario') return res.status(403).send('Proibido');
+
+  try {
+    const { tratamentos, exames } = await listarAgendamentos();
+    return res.render('agenda', { user: req.user, tratamentos, exames, isTutor: false });
+  } catch (error) {
+    return res.status(500).send('Erro ao listar agendamentos');
+  }
+};
+
+const handleVerAgenda = async (req, res) => {
+  try {
+    if (req.user.tipo === 'funcionario') {
+      const { tratamentos, exames } = await listarAgendamentos();
+      return res.render('agenda', { user: req.user, tratamentos, exames, isTutor: false });
+    }
+
+    if (req.user.tipo === 'tutor') {
+      const { tratamentos, exames } = await verAgendaTutor(req.user.id);
+      return res.render('agenda', { user: req.user, tratamentos, exames, isTutor: true });
+    }
+
+    return res.status(403).send('Proibido');
+  } catch (error) {
+    return res.status(500).send('Erro ao carregar agenda');
+  }
+};
+
+module.exports = {
+  showAgendarTratamento,
+  handleAgendarTratamento,
+  handleAgendarExame,
+  handleListarAgendamentos,
+  handleVerAgenda
+};
+
+===== backend/controllers/animaisController.js =====
+const {
+  cadastrarAnimal,
+  listarAnimaisPorTutor,
+  listarTodosAnimais,
+  buscarAnimalPorId,
+  validarTutorExiste,
+  darAltaAnimal,
+  listarPontuarios
+} = require('../services/animaisService');
+const { LISTA_ESPECIES } = require('../especies');
+
+const showCadastroAnimal = (req, res) => {
+  if (!['funcionario', 'tutor'].includes(req.user.tipo)) {
+    return res.status(403).send('Proibido');
+  }
+
+  return res.render('cadastro_animal', {
+    especies: LISTA_ESPECIES,
+    user: req.user,
+    error: null
+  });
+};
+
+const handleCadastrarAnimal = async (req, res) => {
+  try {
+    let tutorId = req.user.id;
+
+    if (req.user.tipo === 'funcionario') {
+      tutorId = Number(req.body.tutorId);
+      if (!tutorId) {
+        return res.status(400).render('cadastro_animal', {
+          especies: LISTA_ESPECIES,
+          user: req.user,
+          error: 'FuncionÃ¡rio deve informar o ID do tutor para associar o animal.'
+        });
+      }
+    }
+
+    const tutorExiste = await validarTutorExiste(tutorId);
+    if (!tutorExiste) {
+      return res.status(400).render('cadastro_animal', {
+        especies: LISTA_ESPECIES,
+        user: req.user,
+        error: 'Tutor nÃ£o encontrado. Informe um ID de tutor vÃ¡lido.'
+      });
+    }
+
+    const imagemPath = req.file ? `/images/animais/${req.file.filename}` : null;
+    await cadastrarAnimal(req.body, tutorId, imagemPath);
+
+    if (req.user.tipo === 'funcionario') {
+      return res.redirect('/animais/lista-completa');
+    }
+
+    return res.redirect('/animais/listar-animais');
+  } catch (error) {
+    return res.status(500).send(error.message || 'Erro ao cadastrar animal');
+  }
+};
+
+const handleListarAnimais = async (req, res) => {
+  if (req.user.tipo !== 'tutor') return res.status(403).send('Proibido');
+
+  try {
+    const animais = await listarAnimaisPorTutor(req.user.id);
+    return res.render('menu_cliente', { animais, user: req.user });
+  } catch (error) {
+    return res.status(500).send(error.message || 'Erro ao listar animais');
+  }
+};
+
+const handleListarTodosAnimais = async (req, res) => {
+  if (req.user.tipo !== 'funcionario') return res.status(403).send('Proibido');
+
+  try {
+    const animais = await listarTodosAnimais();
+    return res.render('menu_funcionario', { user: req.user, animais });
+  } catch (error) {
+    return res.status(500).send(error.message || 'Erro ao listar animais');
+  }
+};
+
+const handleVerFichaAnimal = async (req, res) => {
+  if (req.user.tipo !== 'funcionario') return res.status(403).send('Proibido');
+
+  try {
+    const animal = await buscarAnimalPorId(req.params.id);
+    if (!animal) return res.status(404).send('Animal nÃ£o encontrado');
+
+    return res.render('detalhes_animal', { user: req.user, animal });
+  } catch (error) {
+    return res.status(500).send(error.message || 'Erro ao carregar ficha do animal');
+  }
+};
+
+const handleDarAltaAnimal = async (req, res) => {
+  if (req.user.tipo !== 'funcionario') return res.status(403).send('Proibido');
+
+  try {
+    await darAltaAnimal(Number(req.body.animalId));
+    return res.redirect('/animais/lista-completa');
+  } catch (error) {
+    return res.status(404).send(error.message || 'Animal nÃ£o encontrado');
+  }
+};
+
+const handleListarPontuarios = async (req, res) => {
+  if (!['funcionario', 'tutor'].includes(req.user.tipo)) return res.status(403).send('Proibido');
+
+  try {
+    const pontuarios = await listarPontuarios();
+
+    if (req.user.tipo === 'tutor') {
+      const filtrados = pontuarios.filter((p) => p.tutor_id === req.user.id);
+      return res.json(filtrados);
+    }
+
+    return res.json(pontuarios);
+  } catch (error) {
+    return res.status(500).send(error.message || 'Erro ao listar pontuÃ¡rios');
+  }
+};
+
+module.exports = {
+  showCadastroAnimal,
+  handleCadastrarAnimal,
+  handleListarAnimais,
+  handleListarTodosAnimais,
+  handleVerFichaAnimal,
+  handleDarAltaAnimal,
+  handleListarPontuarios
+};
+
+===== backend/controllers/relatoriosController.js =====
+const { gerarRelatorios, sistemaManchester } = require('../services/relatoriosService');
+
+const handleGerarRelatorios = async (req, res) => {
+  try {
+    const { total, classifCount } = await gerarRelatorios();
+    res.render('relatorios', { total, classifCount });
+  } catch (error) {
+    res.status(500).send('Erro');
+  }
+};
+
+const handleSistemaManchester = async (req, res) => {
+  try {
+    const animais = await sistemaManchester();
+    res.render('relatorios', { animais });
+  } catch (error) {
+    res.status(500).send('Erro');
+  }
+};
+
+module.exports = { handleGerarRelatorios, handleSistemaManchester };
+
+===== backend/models/Exame.js =====
+class Exame {
+  constructor(id, tipo, resultados, data, realizado, animalId) {
+    this.id = id;
+    this.tipo = tipo;
+    this.resultados = resultados;
+    this.data = data;
+    this.realizado = realizado;
+    this.animalId = animalId;
+  }
+}
+
+module.exports = Exame;
+
+===== backend/routes/admin.js =====
+const express = require('express');
+const bcrypt = require('bcryptjs');
+const db = require('../config/db');
+const router = express.Router();
+const { verifyJWT } = require('../middleware/auth');
+const { handleListarUsuarios } = require('../controllers/adminController');
+
+router.get('/listar-usuarios', verifyJWT, handleListarUsuarios);
+
+router.get('/criar-funcionario', verifyJWT, (req, res) => {
+  if (req.user.nivel !== 'administrador') return res.status(403).send('Acesso proibido');
+  return res.render('admin_criar_funcionario', { error: null });
+});
+
+router.post('/criar-funcionario', verifyJWT, (req, res) => {
+  if (req.user.nivel !== 'administrador') return res.status(403).send('Acesso proibido');
+
+  const { username, senha, nivel } = req.body;
+  if (!username || !senha || !nivel) {
+    return res.render('admin_criar_funcionario', { error: 'Preencha username, senha e nÃ­vel' });
+  }
+
+  const senhaHash = bcrypt.hashSync(senha, 10);
+  db.query('INSERT INTO usuarios (username, senha_hash, nivel) VALUES (?, ?, ?)', [username, senhaHash, nivel], (err) => {
+    if (err) return res.render('admin_criar_funcionario', { error: 'Erro ao criar usuÃ¡rio' });
+    return res.redirect('/menu-funcionario');
+  });
+});
+
+module.exports = router;
+
+===== backend/routes/agenda.js =====
+const express = require('express');
+const router = express.Router();
+const { verifyJWT } = require('../middleware/auth');
+const { handleAgendarTratamento, handleAgendarExame, handleListarAgendamentos, handleVerAgenda } = require('../controllers/agendaController');
+
+router.post('/agendar-tratamento', verifyJWT, handleAgendarTratamento);
+router.post('/agendar-exame', verifyJWT, handleAgendarExame);
+router.get('/listar-agendamentos', verifyJWT, handleListarAgendamentos);
+router.get('/ver-agenda', verifyJWT, handleVerAgenda);
+
+module.exports = router;
+
+===== backend/routes/animais.js =====
+const express = require('express');
+const multer = require('multer');
+const path = require('path');
+const router = express.Router();
+const { verifyJWT } = require('../middleware/auth');
+const {
+  handleCadastrarAnimal,
+  handleListarAnimais,
+  handleListarTodosAnimais,
+  handleVerFichaAnimal,
+  handleDarAltaAnimal,
+  handleListarPontuarios,
+  showCadastroAnimal
+} = require('../controllers/animaisController');
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, path.join(__dirname, '../../frontend/public/images/animais'));
+  },
+  filename: (req, file, cb) => {
+    cb(null, `${Date.now()}-${file.originalname}`);
+  }
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (!['.jpg', '.jpeg', '.png'].includes(ext)) {
+      return cb(new Error('Apenas JPG, JPEG ou PNG sÃ£o permitidos'));
+    }
+    cb(null, true);
+  }
+});
+
+router.get('/cadastrar-animal', verifyJWT, showCadastroAnimal);
+router.post('/cadastrar-animal', verifyJWT, upload.single('imagem'), handleCadastrarAnimal);
+
+router.get('/listar-animais', verifyJWT, handleListarAnimais); // tutor
+router.get('/lista-completa', verifyJWT, handleListarTodosAnimais); // funcionÃ¡rio/admin
+router.get('/pontuarios', verifyJWT, handleListarPontuarios);
+router.get('/:id', verifyJWT, handleVerFichaAnimal); // ficha do animal
+router.post('/dar-alta', verifyJWT, handleDarAltaAnimal);
+
+router.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
+    return res.status(400).send('Imagem muito grande! MÃ¡ximo 5 MB.');
+  }
+  if (err) return res.status(400).send(err.message);
+  return next();
+});
+
+module.exports = router;
+
+===== backend/routes/auth.js =====
+const express = require('express');
+const router = express.Router();
+const db = require('../config/db');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+
+const JWT_SECRET = 'seu-secret-super-seguro-aqui'; // Mude isso em produÃ§Ã£o
+
+const renderInicial = (res, options = {}) => {
+  const {
+    error = null,
+    activeTab = 'login',
+    formData = {}
+  } = options;
+
+  // "user" Ã© enviado como fallback para evitar ReferenceError caso a view
+  // seja editada localmente com referÃªncias a user.* por engano.
+  res.render('menu_inicial', { error, activeTab, formData, user: {} });
+};
+
+// Tela inicial Ãºnica: login + cadastro
+router.get('/', (_, res) => {
+  renderInicial(res);
+});
+
+// Login Ãºnico (funcionÃ¡rio ou tutor)
+router.post('/login', (req, res) => {
+  const { email, senha } = req.body;
+
+  if (!email || !senha) {
+    return renderInicial(res, { error: 'Informe email/username e senha', activeTab: 'login' });
+  }
+
+  // Tenta autenticar como funcionÃ¡rio (username)
+  db.query('SELECT * FROM usuarios WHERE username = ?', [email], (err, results) => {
+    if (err) {
+      console.error('Erro no servidor (funcionÃ¡rio):', err);
+      return res.status(500).send('Erro no servidor');
+    }
+
+    if (results.length > 0) {
+      const user = results[0];
+      if (bcrypt.compareSync(senha, user.senha_hash)) {
+        const token = jwt.sign(
+          {
+            id: user.id,
+            username: user.username,
+            nivel: user.nivel,
+            tipo: 'funcionario'
+          },
+          JWT_SECRET,
+          { expiresIn: '1h' }
+        );
+
+        res.cookie('jwt', token, { httpOnly: true, secure: false, maxAge: 3600000 });
+        return res.redirect('/menu-funcionario');
+      }
+    }
+
+    // Se nÃ£o autenticou como funcionÃ¡rio, tenta como tutor
+    db.query('SELECT * FROM tutores WHERE email = ?', [email], (errTutor, tutorResults) => {
+      if (errTutor) {
+        console.error('Erro no servidor (tutor):', errTutor);
+        return res.status(500).send('Erro no servidor');
+      }
+
+      if (tutorResults.length > 0) {
+        const tutor = tutorResults[0];
+        if (bcrypt.compareSync(senha, tutor.senha_hash)) {
+          const token = jwt.sign(
+            {
+              id: tutor.id,
+              email: tutor.email,
+              tipo: 'tutor'
+            },
+            JWT_SECRET,
+            { expiresIn: '1h' }
+          );
+
+          res.cookie('jwt', token, { httpOnly: true, secure: false, maxAge: 3600000 });
+          return res.redirect('/menu-cliente');
+        }
+      }
+
+      return renderInicial(res, { error: 'Credenciais invÃ¡lidas', activeTab: 'login' });
+    });
+  });
+});
+
+// MantÃ©m rota antiga por compatibilidade, mas sempre volta para a tela Ãºnica
+router.get('/cadastrar-tutor', (_, res) => {
+  res.redirect('/');
+});
+
+// Cadastro de tutor com auto-login
+router.post('/cadastrar-tutor', (req, res) => {
+  const { nome, email, telefone, genero, morada, password } = req.body;
+
+  const formData = {
+    nome: nome || '',
+    email: email || '',
+    telefone: telefone || '',
+    genero: genero || '',
+    morada: morada || ''
+  };
+
+  if (!nome || !email || !password) {
+    return renderInicial(res, {
+      error: 'Preencha nome, email e senha',
+      activeTab: 'cadastro',
+      formData
+    });
+  }
+
+  const senhaHash = bcrypt.hashSync(password, 10);
+
+  db.query(
+    'INSERT INTO tutores (nome, email, telefone, genero, morada, senha_hash) VALUES (?, ?, ?, ?, ?, ?)',
+    [nome, email, telefone || null, genero || null, morada || null, senhaHash],
+    (err, result) => {
+      if (err) {
+        if (err.code === 'ER_DUP_ENTRY') {
+          return renderInicial(res, {
+            error: 'Este email jÃ¡ estÃ¡ cadastrado',
+            activeTab: 'cadastro',
+            formData
+          });
+        }
+
+        console.error('Erro ao cadastrar tutor:', err);
+        return renderInicial(res, {
+          error: 'Erro ao cadastrar tutor',
+          activeTab: 'cadastro',
+          formData
+        });
+      }
+
+      const token = jwt.sign(
+        {
+          id: result.insertId,
+          email,
+          tipo: 'tutor'
+        },
+        JWT_SECRET,
+        { expiresIn: '1h' }
+      );
+
+      res.cookie('jwt', token, { httpOnly: true, secure: false, maxAge: 3600000 });
+      return res.redirect('/menu-cliente');
+    }
+  );
+});
+
+router.get('/logout', (_, res) => {
+  res.clearCookie('jwt');
+  res.redirect('/');
+});
+
+module.exports = router;
+
+===== backend/services/agendaService.js =====
+const db = require('../config/db');
+
+const queryAsync = (sql, params = []) => new Promise((resolve, reject) => db.query(sql, params, (err, results) => err ? reject(err) : resolve(results)));
+
+const agendarTratamento = async ({ tipo, descricao, data, animalId }) => {
+  await queryAsync(
+    'INSERT INTO tratamentos (tipo, descricao, data, animal_id) VALUES (?, ?, ?, ?)',
+    [tipo, descricao, data, animalId]
+  );
+};
+
+const agendarExame = async ({ tipo, resultados, data, animalId }) => {
+  await queryAsync(
+    'INSERT INTO exames (tipo, resultados, data, animal_id) VALUES (?, ?, ?, ?)',
+    [tipo, resultados, data, animalId]
+  );
+};
+
+const listarAnimaisParaAgendamento = async () => {
+  return queryAsync(
+    `SELECT a.id, a.nome, t.nome AS tutor_nome
+     FROM animais a
+     JOIN tutores t ON t.id = a.tutor_id
+     ORDER BY a.nome ASC`
+  );
+};
+
+const listarAgendamentos = async () => {
+  const tratamentos = await queryAsync(
+    `SELECT tr.id, tr.tipo, tr.descricao, tr.data, a.id AS animal_id, a.nome AS animal_nome,
+            t.id AS tutor_id, t.nome AS tutor_nome
+     FROM tratamentos tr
+     JOIN animais a ON tr.animal_id = a.id
+     JOIN tutores t ON a.tutor_id = t.id
+     ORDER BY tr.data DESC, tr.id DESC`
+  );
+
+  const exames = await queryAsync(
+    `SELECT ex.id, ex.tipo, ex.resultados, ex.data, a.id AS animal_id, a.nome AS animal_nome,
+            t.id AS tutor_id, t.nome AS tutor_nome
+     FROM exames ex
+     JOIN animais a ON ex.animal_id = a.id
+     JOIN tutores t ON a.tutor_id = t.id
+     ORDER BY ex.data DESC, ex.id DESC`
+  );
+
+  return { tratamentos, exames };
+};
+
+const verAgendaTutor = async (tutorId) => {
+  const tratamentos = await queryAsync(
+    `SELECT tr.id, tr.tipo, tr.descricao, tr.data, a.nome AS animal_nome
+     FROM tratamentos tr
+     JOIN animais a ON tr.animal_id = a.id
+     WHERE a.tutor_id = ?
+     ORDER BY tr.data DESC, tr.id DESC`,
+    [tutorId]
+  );
+
+  const exames = await queryAsync(
+    `SELECT ex.id, ex.tipo, ex.resultados, ex.data, a.nome AS animal_nome
+     FROM exames ex
+     JOIN animais a ON ex.animal_id = a.id
+     WHERE a.tutor_id = ?
+     ORDER BY ex.data DESC, ex.id DESC`,
+    [tutorId]
+  );
+
+  return { tratamentos, exames };
+};
+
+module.exports = {
+  agendarTratamento,
+  agendarExame,
+  listarAnimaisParaAgendamento,
+  listarAgendamentos,
+  verAgendaTutor
+};
+
+===== backend/services/animaisService.js =====
+const db = require('../config/db');
+const { classificarPrioridade, gerarPontuarioPorClassificacao } = require('../utils/classificador');
+
+const queryAsync = (sql, params = []) => new Promise((resolve, reject) => db.query(sql, params, (err, results) => err ? reject(err) : resolve(results)));
+
+const validarTutorExiste = async (tutorId) => {
+  const tutores = await queryAsync('SELECT id FROM tutores WHERE id = ?', [tutorId]);
+  return tutores.length > 0;
+};
+
+const anexarPontuario = (animais) => animais.map((animal) => ({
+  ...animal,
+  pontuario: gerarPontuarioPorClassificacao(animal.classif)
+}));
+
+const cadastrarAnimal = async ({ nome, idade, especie, sexo, peso, sintomas, gravidade }, tutorId, imagemPath) => {
+  const classif = classificarPrioridade(parseInt(idade, 10), especie, parseInt(gravidade, 10));
+  await queryAsync(
+    'INSERT INTO animais (nome, idade, especie, sexo, peso, sintomas, classif, tutor_id, imagem_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [nome, parseInt(idade, 10), especie, sexo, parseFloat(peso), sintomas, classif, tutorId, imagemPath]
+  );
+};
+
+const listarAnimaisPorTutor = async (tutorId) => {
+  const resultados = await queryAsync(
+    `SELECT a.*, t.nome AS tutor_nome, t.email AS tutor_email
+     FROM animais a
+     JOIN tutores t ON t.id = a.tutor_id
+     WHERE a.tutor_id = ?
+     ORDER BY a.id DESC`,
+    [tutorId]
+  );
+
+  return anexarPontuario(resultados);
+};
+
+const listarTodosAnimais = async () => {
+  const resultados = await queryAsync(
+    `SELECT a.*, t.nome AS tutor_nome, t.email AS tutor_email
+     FROM animais a
+     JOIN tutores t ON t.id = a.tutor_id
+     ORDER BY FIELD(a.classif, 'D', 'C', 'B', 'A'), a.id DESC`
+  );
+
+  return anexarPontuario(resultados);
+};
+
+const buscarAnimalPorId = async (animalId) => {
+  const results = await queryAsync(
+    `SELECT a.*, t.nome AS tutor_nome, t.email AS tutor_email, t.telefone AS tutor_telefone
+     FROM animais a
+     JOIN tutores t ON t.id = a.tutor_id
+     WHERE a.id = ?`,
+    [animalId]
+  );
+
+  if (!results[0]) return null;
+  return {
+    ...results[0],
+    pontuario: gerarPontuarioPorClassificacao(results[0].classif)
+  };
+};
+
+const darAltaAnimal = async (animalId) => {
+  const result = await queryAsync('DELETE FROM animais WHERE id = ?', [animalId]);
+  if (!result.affectedRows) throw new Error('Animal nÃ£o encontrado');
+};
+
+const listarPontuarios = async () => {
+  const animais = await queryAsync('SELECT id, nome, classif, tutor_id FROM animais');
+  return animais
+    .map((animal) => ({
+      ...animal,
+      pontuario: gerarPontuarioPorClassificacao(animal.classif)
+    }))
+    .sort((a, b) => b.pontuario - a.pontuario);
+};
+
+module.exports = {
+  cadastrarAnimal,
+  listarAnimaisPorTutor,
+  listarTodosAnimais,
+  buscarAnimalPorId,
+  validarTutorExiste,
+  darAltaAnimal,
+  listarPontuarios
+};
+
+===== backend/services/relatoriosService.js =====
+const db = require('../config/db');
+
+const queryAsync = (sql, params) => new Promise((resolve, reject) => db.query(sql, params, (err, results) => err ? reject(err) : resolve(results)));
+
+const gerarRelatorios = async () => {
+  const [total] = await queryAsync('SELECT COUNT(*) AS total FROM animais');
+  const classifCount = await queryAsync('SELECT classif, COUNT(*) AS count FROM animais GROUP BY classif');
+  return { total: total.total, classifCount };
+};
+
+const sistemaManchester = async () => await queryAsync('SELECT * FROM animais ORDER BY classif DESC');
+
+module.exports = { gerarRelatorios, sistemaManchester };
+
+===== backend/utils/classificador.js =====
+const { LISTA_ESPECIES_EXOTICAS } = require('../especies');
+
+const classificarPrioridade = (idade, especie, gravidade) => {
+  let pontos = 0;
+  if (gravidade === 3) pontos += 3;
+  else if (gravidade === 2) pontos += 1;
+  if (idade < 1 || idade > 10) pontos += 1;
+  if (LISTA_ESPECIES_EXOTICAS.includes(especie)) pontos += 1;
+
+  // D = mais urgente | A = menos urgente
+  return pontos >= 4 ? 'D' : pontos >= 3 ? 'C' : pontos >= 1 ? 'B' : 'A';
+};
+
+const gerarPontuarioPorClassificacao = (classif) => {
+  const tabela = { D: 100, C: 75, B: 50, A: 25 };
+  return tabela[classif] || 0;
+};
+
+const gerarPontuarioAnimal = (idade, especie, gravidade) => {
+  const classif = classificarPrioridade(idade, especie, gravidade);
+  return gerarPontuarioPorClassificacao(classif);
+};
+
+module.exports = {
+  classificarPrioridade,
+  gerarPontuarioPorClassificacao,
+  gerarPontuarioAnimal
+};
+
+===== frontend/public/js/app.js =====
+document.addEventListener('DOMContentLoaded', () => {
+  const body = document.body;
+  const toggle = document.getElementById('mode-toggle');
+
+  // SÃ³ aplica o comportamento de tema nas telas que tÃªm botÃ£o de toggle
+  if (!toggle) {
+    return;
+  }
+
+  // Carrega tema salvo
+  if (localStorage.getItem('theme') === 'dark') {
+    body.setAttribute('data-bs-theme', 'dark');
+    toggle.innerHTML = '<i class="bi bi-sun-fill me-2"></i> Modo Claro';
+  }
+
+  toggle.addEventListener('click', () => {
+    if (body.getAttribute('data-bs-theme') === 'dark') {
+      body.setAttribute('data-bs-theme', 'light');
+      localStorage.setItem('theme', 'light');
+      toggle.innerHTML = '<i class="bi bi-moon-stars-fill me-2"></i> Modo Escuro';
+    } else {
+      body.setAttribute('data-bs-theme', 'dark');
+      localStorage.setItem('theme', 'dark');
+      toggle.innerHTML = '<i class="bi bi-sun-fill me-2"></i> Modo Claro';
+    }
+  });
+});
+
+===== frontend/views/agenda.ejs =====
+
+===== frontend/views/agendar_tratamento.ejs =====
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <title>Agendar Tratamento</title>
+    <link rel="stylesheet" href="/css/bootstrap.min.css">
+</head>
+<body>
+    <% const listaAnimais = Array.isArray(animais) ? animais : []; %>
+    <div class="container mt-5" style="max-width: 860px;">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2 class="mb-0">Agendar Tratamento</h2>
+            <a class="btn btn-outline-secondary" href="/agenda/ver-agenda">Ver Agenda</a>
+        </div>
+
+        <% if (error) { %>
+            <div class="alert alert-danger"><%= error %></div>
+        <% } %>
+
+        <form action="/agenda/agendar-tratamento" method="POST">
+            <div class="mb-3">
+                <label for="animalId" class="form-label">Animal</label>
+                <select name="animalId" id="animalId" class="form-select" required>
+                    <option value="">Selecione...</option>
+                    <% listaAnimais.forEach(a => { %>
+                        <option value="<%= a.id %>"><%= a.nome %> â€” Tutor: <%= a.tutor_nome %></option>
+                    <% }) %>
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label for="tipo" class="form-label">Tipo de Tratamento</label>
+                <input type="text" name="tipo" id="tipo" class="form-control" required>
+            </div>
+
+            <div class="mb-3">
+                <label for="descricao" class="form-label">DescriÃ§Ã£o</label>
+                <textarea name="descricao" id="descricao" class="form-control" rows="3" required></textarea>
+            </div>
+
+            <div class="mb-4">
+                <label for="data" class="form-label">Data</label>
+                <input type="date" name="data" id="data" class="form-control" required>
+            </div>
+
+            <button type="submit" class="btn btn-primary w-100">Agendar Tratamento</button>
+        </form>
+    </div>
+</body>
+</html>
+
+===== frontend/views/cadastro_animal.ejs =====
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <title>Cadastrar Animal</title>
+    <link rel="stylesheet" href="/css/bootstrap.min.css">
+</head>
+<body>
+    <% const isFuncionario = user && user.tipo === 'funcionario'; %>
+    <div class="container mt-5" style="max-width: 900px;">
+        <h2 class="text-center mb-4">Cadastrar Animal</h2>
+
+        <% if (error) { %>
+            <div class="alert alert-danger"><%= error %></div>
+        <% } %>
+
+        <form action="/animais/cadastrar-animal" method="POST" enctype="multipart/form-data">
+            <% if (isFuncionario) { %>
+                <div class="mb-3">
+                    <label for="tutorId" class="form-label">ID do Tutor (obrigatÃ³rio para funcionÃ¡rio)</label>
+                    <input type="number" name="tutorId" id="tutorId" class="form-control" min="1" required>
+                </div>
+            <% } %>
+
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="nome" class="form-label">Nome do animal</label>
+                    <input type="text" name="nome" id="nome" class="form-control" required>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="idade" class="form-label">Idade (em anos)</label>
+                    <input type="number" name="idade" id="idade" class="form-control" min="0" required>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="especie" class="form-label">EspÃ©cie</label>
+                    <select name="especie" id="especie" class="form-select" required>
+                        <% especies.forEach(esp => { %>
+                            <option value="<%= esp %>"><%= esp %></option>
+                        <% }); %>
+                    </select>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="sexo" class="form-label">Sexo</label>
+                    <select name="sexo" id="sexo" class="form-select" required>
+                        <option value="Macho">Macho</option>
+                        <option value="FÃªmea">FÃªmea</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="peso" class="form-label">Peso (kg)</label>
+                    <input type="number" name="peso" id="peso" class="form-control" step="0.01" min="0" required>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="gravidade" class="form-label">Gravidade dos sintomas</label>
+                    <select name="gravidade" id="gravidade" class="form-select" required>
+                        <option value="1">Leve</option>
+                        <option value="2">Moderado</option>
+                        <option value="3">Grave</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label for="sintomas" class="form-label">Sintomas principais</label>
+                <textarea name="sintomas" id="sintomas" class="form-control" rows="4" required></textarea>
+            </div>
+
+            <div class="mb-4">
+                <label for="imagem" class="form-label">Foto do animal (JPG/PNG, max 5MB)</label>
+                <input type="file" name="imagem" id="imagem" class="form-control" accept="image/jpeg, image/png">
+            </div>
+
+            <button type="submit" class="btn btn-primary w-100">Cadastrar Animal</button>
+        </form>
+    </div>
+</body>
+</html>
+
+===== frontend/views/detalhes_animal.ejs =====
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ficha do Animal</title>
+  <link rel="stylesheet" href="/css/bootstrap.min.css" />
+</head>
+<body>
+  <div class="container py-4">
+    <a href="/animais/lista-completa" class="btn btn-outline-secondary mb-3">&larr; Voltar</a>
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h3 class="mb-3">Ficha: <%= animal.nome %></h3>
+        <div class="row">
+          <div class="col-md-4">
+            <% if (animal.imagem_path) { %>
+              <img src="<%= animal.imagem_path %>" alt="Foto do animal" class="img-fluid rounded" />
+            <% } else { %>
+              <div class="border rounded p-4 text-center text-muted">Sem foto</div>
+            <% } %>
+          </div>
+          <div class="col-md-8">
+            <p><strong>ID:</strong> <%= animal.id %></p>
+            <p><strong>EspÃ©cie:</strong> <%= animal.especie %></p>
+            <p><strong>Sexo:</strong> <%= animal.sexo %></p>
+            <p><strong>Peso:</strong> <%= animal.peso %> kg</p>
+            <p><strong>ClassificaÃ§Ã£o Manchester:</strong> <%= animal.classif %></p>
+            <p><strong>PontuÃ¡rio:</strong> <%= animal.pontuario %></p>
+            <p><strong>Sintomas:</strong> <%= animal.sintomas %></p>
+            <hr>
+            <h5>Tutor associado</h5>
+            <p><strong>Nome:</strong> <%= animal.tutor_nome %></p>
+            <p><strong>Email:</strong> <%= animal.tutor_email %></p>
+            <p><strong>Telefone:</strong> <%= animal.tutor_telefone || 'N/D' %></p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+
+===== frontend/views/menu_cliente.ejs =====
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ãrea do Cliente</title>
+    <link rel="stylesheet" href="/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body data-bs-theme="light">
+    <% const safeUser = (typeof user !== 'undefined' && user) ? user : {}; %>
+    <% const lista = Array.isArray(animais) ? animais : []; %>
+    <div class="sidebar">
+        <h4 class="text-primary fw-bold">Vet Pata-Node</h4>
+        <ul class="nav flex-column">
+            <li class="nav-item"><a class="nav-link" href="/animais/listar-animais"><i class="bi bi-heart-pulse me-2"></i> Meus animais</a></li>
+            <li class="nav-item"><a class="nav-link" href="/animais/cadastrar-animal"><i class="bi bi-plus-circle me-2"></i> Cadastrar novo animal</a></li>
+            <li class="nav-item"><a class="nav-link" href="/agenda/ver-agenda"><i class="bi bi-calendar-check me-2"></i> Agenda e status</a></li>
+            <li class="nav-item"><a class="nav-link" href="/animais/pontuarios"><i class="bi bi-speedometer2 me-2"></i> Meus pontuÃ¡rios (JSON)</a></li>
+            <li class="nav-item"><a class="nav-link" href="/auth/logout"><i class="bi bi-box-arrow-right me-2"></i> Sair</a></li>
+        </ul>
+        <hr>
+        <div class="toggle-btn d-flex align-items-center" id="mode-toggle"><i class="bi bi-moon-stars-fill me-2"></i> Modo Escuro</div>
+    </div>
+
+    <main class="content">
+        <h2 class="mb-3">OlÃ¡, <%= safeUser.email || safeUser.username || 'Cliente' %></h2>
+        <p class="lead">Aqui vocÃª vÃª e gerencia apenas os seus animais.</p>
+
+        <div class="card shadow-sm border-0 rounded-4">
+            <div class="card-body">
+                <h5 class="card-title mb-3">Meus animais</h5>
+                <% if (!lista.length) { %>
+                    <p class="mb-0">Ainda nÃ£o hÃ¡ animais cadastrados para sua conta.</p>
+                <% } else { %>
+                    <div class="row g-3">
+                        <% lista.forEach(animal => { %>
+                            <div class="col-md-6 col-lg-4">
+                                <div class="card h-100">
+                                    <% if (animal.imagem_path) { %>
+                                        <img src="<%= animal.imagem_path %>" class="card-img-top" alt="Foto de <%= animal.nome %>" style="height:180px;object-fit:cover;">
+                                    <% } %>
+                                    <div class="card-body">
+                                        <h6 class="card-title mb-1"><%= animal.nome %></h6>
+                                        <p class="mb-1"><strong>EspÃ©cie:</strong> <%= animal.especie %></p>
+                                        <p class="mb-1"><strong>ClassificaÃ§Ã£o:</strong> <%= animal.classif %></p>
+                                        <p class="mb-1"><strong>PontuÃ¡rio:</strong> <%= animal.pontuario %></p>
+                                        <p class="mb-0"><strong>Status:</strong> Em acompanhamento</p>
+                                    </div>
+                                </div>
+                            </div>
+                        <% }) %>
+                    </div>
+                <% } %>
+            </div>
+        </div>
+    </main>
+
+    <script src="/js/app.js"></script>
+</body>
+</html>
+
+===== frontend/views/menu_funcionario.ejs =====
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Menu FuncionÃ¡rio</title>
+    <link rel="stylesheet" href="/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body data-bs-theme="light">
+    <% const lista = Array.isArray(animais) ? animais : []; %>
+    <div class="sidebar">
+        <h4 class="text-primary fw-bold">Vet Pata-Node</h4>
+        <ul class="nav flex-column">
+            <li class="nav-item"><a class="nav-link" href="/animais/lista-completa"><i class="bi bi-list-ul me-2"></i> Todos os animais</a></li>
+            <li class="nav-item"><a class="nav-link" href="/animais/cadastrar-animal"><i class="bi bi-plus-circle me-2"></i> Cadastrar Animal</a></li>
+            <li class="nav-item"><a class="nav-link" href="/agenda/ver-agenda"><i class="bi bi-calendar-event me-2"></i> Agenda</a></li>
+            <li class="nav-item"><a class="nav-link" href="/relatorios/gerar-relatorios"><i class="bi bi-bar-chart me-2"></i> RelatÃ³rios</a></li>
+            <li class="nav-item"><a class="nav-link" href="/animais/pontuarios"><i class="bi bi-speedometer2 me-2"></i> PontuÃ¡rios (JSON)</a></li>
+            <li class="nav-item"><a class="nav-link" href="/auth/logout"><i class="bi bi-box-arrow-right me-2"></i> Sair</a></li>
+        </ul>
+        <hr>
+        <div class="toggle-btn d-flex align-items-center" id="mode-toggle"><i class="bi bi-moon-stars-fill me-2"></i> Modo Escuro</div>
+    </div>
+
+    <main class="content">
+        <h2 class="mb-2">Bem-vindo, <%= user.username %></h2>
+        <p class="text-muted mb-4">GestÃ£o completa de animais e tutores.</p>
+
+        <div class="card shadow-sm border-0 rounded-4">
+            <div class="card-body">
+                <h5 class="card-title mb-3">Lista completa de animais</h5>
+                <% if (!lista.length) { %>
+                    <p class="mb-0">Ainda nÃ£o existem animais cadastrados.</p>
+                <% } else { %>
+                    <div class="table-responsive">
+                        <table class="table table-striped align-middle">
+                            <thead>
+                                <tr>
+                                    <th>ID</th><th>Nome</th><th>Classif.</th><th>PontuÃ¡rio</th><th>Tutor</th><th>AÃ§Ãµes</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <% lista.forEach(animal => { %>
+                                    <tr>
+                                        <td><%= animal.id %></td>
+                                        <td><%= animal.nome %></td>
+                                        <td><span class="badge text-bg-primary"><%= animal.classif %></span></td>
+                                        <td><span class="badge text-bg-warning text-dark"><%= animal.pontuario %></span></td>
+                                        <td><%= animal.tutor_nome %> (<%= animal.tutor_email %>)</td>
+                                        <td>
+                                            <a class="btn btn-sm btn-outline-primary" href="/animais/<%= animal.id %>">Ficha</a>
+                                            <form action="/animais/dar-alta" method="POST" class="d-inline">
+                                                <input type="hidden" name="animalId" value="<%= animal.id %>">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger">Dar alta</button>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                <% }) %>
+                            </tbody>
+                        </table>
+                    </div>
+                <% } %>
+            </div>
+        </div>
+    </main>
+
+    <script src="/js/app.js"></script>
+</body>
+</html>
+
+===== frontend/views/menu_inicial.ejs =====
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClÃ­nica Vet Pata-Node</title>
+    <link rel="stylesheet" href="/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body data-bs-theme="light">
+    <% 
+        const currentTab = (typeof activeTab !== 'undefined' && activeTab) ? activeTab : 'login';
+        const currentFormData = (typeof formData !== 'undefined' && formData) ? formData : {};
+        const showLogin = currentTab === 'login';
+        const emailValue = currentFormData.email ? currentFormData.email : '';
+        const generoValue = currentFormData.genero ? currentFormData.genero : '';
+    %>
+
+    <div class="container py-5">
+        <div class="row justify-content-center">
+            <div class="col-lg-7 col-md-10">
+                <div class="card shadow-lg border-0 rounded-4">
+                    <div class="card-body p-4 p-md-5">
+                        <h1 class="h3 text-center mb-2 fw-bold text-primary">ClÃ­nica Vet Pata-Node</h1>
+                        <p class="text-center text-muted mb-4">Acesso de funcionÃ¡rios e clientes</p>
+
+                        <% if (typeof error !== 'undefined' && error) { %>
+                            <div class="alert alert-danger" role="alert"><%= error %></div>
+                        <% } %>
+
+                        <ul class="nav nav-pills nav-fill mb-4 gap-2" role="tablist" aria-label="Acesso">
+                            <li class="nav-item" role="presentation">
+                                <button
+                                    id="btn-login"
+                                    class="nav-link rounded-3 <%= showLogin ? 'active' : '' %>"
+                                    type="button"
+                                    onclick="showPanel('login')"
+                                >
+                                    <i class="bi bi-box-arrow-in-right me-2"></i>Login
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button
+                                    id="btn-cadastro"
+                                    class="nav-link rounded-3 <%= showLogin ? '' : 'active' %>"
+                                    type="button"
+                                    onclick="showPanel('cadastro')"
+                                >
+                                    <i class="bi bi-person-plus me-2"></i>Cadastro
+                                </button>
+                            </li>
+                        </ul>
+
+                        <section id="panel-login" style="display: <%= showLogin ? 'block' : 'none' %>;">
+                            <form action="/auth/login" method="POST" novalidate>
+                                <div class="mb-3">
+                                    <label for="login-email" class="form-label fw-semibold">Email ou Username</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text"><i class="bi bi-person"></i></span>
+                                        <input type="text" name="email" id="login-email" class="form-control rounded-3" required>
+                                    </div>
+                                </div>
+                                <div class="mb-4">
+                                    <label for="login-senha" class="form-label fw-semibold">Senha</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text"><i class="bi bi-lock"></i></span>
+                                        <input type="password" name="senha" id="login-senha" class="form-control rounded-3" required>
+                                    </div>
+                                </div>
+                                <button type="submit" class="btn btn-primary w-100 rounded-3 py-2 fw-bold">Entrar</button>
+                            </form>
+                        </section>
+
+                        <section id="panel-cadastro" style="display: <%= showLogin ? 'none' : 'block' %>;">
+                            <form action="/auth/cadastrar-tutor" method="POST" novalidate>
+                                <div class="mb-3">
+                                    <label for="cadastro-nome" class="form-label fw-semibold">Nome completo</label>
+                                    <input
+                                        type="text"
+                                        name="nome"
+                                        id="cadastro-nome"
+                                        class="form-control rounded-3"
+                                        value="<%= currentFormData.nome || '' %>"
+                                        required
+                                    >
+                                </div>
+                                <div class="mb-3">
+                                    <label for="cadastro-email" class="form-label fw-semibold">Email</label>
+                                    <input
+                                        type="email"
+                                        name="email"
+                                        id="cadastro-email"
+                                        class="form-control rounded-3"
+                                        value="<%= emailValue %>"
+                                        required
+                                    >
+                                </div>
+                                <div class="mb-3">
+                                    <label for="cadastro-telefone" class="form-label fw-semibold">Telefone</label>
+                                    <input
+                                        type="text"
+                                        name="telefone"
+                                        id="cadastro-telefone"
+                                        class="form-control rounded-3"
+                                        value="<%= currentFormData.telefone || '' %>"
+                                    >
+                                </div>
+                                <div class="mb-3">
+                                    <label for="cadastro-genero" class="form-label fw-semibold">GÃªnero</label>
+                                    <select name="genero" id="cadastro-genero" class="form-select rounded-3">
+                                        <option value="" <%= generoValue === '' ? 'selected' : '' %>>Selecione</option>
+                                        <option value="Feminino" <%= generoValue === 'Feminino' ? 'selected' : '' %>>Feminino</option>
+                                        <option value="Masculino" <%= generoValue === 'Masculino' ? 'selected' : '' %>>Masculino</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="cadastro-morada" class="form-label fw-semibold">Morada</label>
+                                    <input
+                                        type="text"
+                                        name="morada"
+                                        id="cadastro-morada"
+                                        class="form-control rounded-3"
+                                        value="<%= currentFormData.morada || '' %>"
+                                    >
+                                </div>
+                                <div class="mb-4">
+                                    <label for="cadastro-password" class="form-label fw-semibold">Senha</label>
+                                    <input type="password" name="password" id="cadastro-password" class="form-control rounded-3" required>
+                                </div>
+                                <button type="submit" class="btn btn-success w-100 rounded-3 py-2 fw-bold">Cadastrar e entrar</button>
+                            </form>
+                        </section>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+      function showPanel(panel) {
+        const isLogin = panel === 'login';
+        const loginPanel = document.getElementById('panel-login');
+        const cadastroPanel = document.getElementById('panel-cadastro');
+        const loginBtn = document.getElementById('btn-login');
+        const cadastroBtn = document.getElementById('btn-cadastro');
+
+        if (!loginPanel || !cadastroPanel || !loginBtn || !cadastroBtn) {
+          return;
+        }
+
+        loginPanel.style.display = isLogin ? 'block' : 'none';
+        cadastroPanel.style.display = isLogin ? 'none' : 'block';
+        loginBtn.classList.toggle('active', isLogin);
+        cadastroBtn.classList.toggle('active', !isLogin);
+      }
+    </script>
+
+    <script src="/js/app.js"></script>
+</body>
+</html>
+
+===== frontend/views/perfil.ejs =====
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Perfil</title>
+    <link rel="stylesheet" href="/css/bootstrap.min.css">
+</head>
+<body>
+    <% const safeUser = (typeof user !== 'undefined' && user) ? user : {}; %>
+
+    <div class="container mt-5" style="max-width: 720px;">
+        <h2 class="mb-4">Perfil de <%= safeUser.username || safeUser.email || 'Utilizador' %></h2>
+
+        <form action="/auth/editar-perfil" method="POST">
+            <div class="mb-3">
+                <label for="nome" class="form-label">Nome</label>
+                <input
+                    id="nome"
+                    type="text"
+                    name="nome"
+                    value="<%= safeUser.nome || '' %>"
+                    class="form-control"
+                    required
+                >
+            </div>
+
+            <button type="submit" class="btn btn-primary">Salvar</button>
+        </form>
+    </div>
+</body>
+</html>
+
+===== frontend/views/prontuarios.ejs =====
+
+===== frontend/views/relatorios.ejs =====
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <title>RelatÃ³rios</title>
+    <link rel="stylesheet" href="/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container">
+        <h2>RelatÃ³rios</h2>
+        <% if (typeof total !== 'undefined' && total !== null) { %>
+            <p>Total de animais: <%= total %></p>
+        <% } %>
+        <% if (typeof classifCount !== 'undefined' && classifCount !== null) { %>
+            <h3>DistribuiÃ§Ã£o por classificaÃ§Ã£o</h3>
+            <table class="table">
+                <tr><th>ClassificaÃ§Ã£o</th><th>Contagem</th></tr>
+                <% classifCount.forEach(c => { %>
+                    <tr><td><%= c.classif %></td><td><%= c.count %></td></tr>
+                <% }); %>
+            </table>
+        <% } %>
+        <% if (typeof animais !== 'undefined' && animais !== null) { %>
+            <h3>Sistema Manchester</h3>
+            <% animais.forEach(a => { %>
+                <p><%= a.nome %> - <%= a.classif %></p>
+            <% }); %>
+        <% } %>
+    </div>
+</body>
+</html>
+

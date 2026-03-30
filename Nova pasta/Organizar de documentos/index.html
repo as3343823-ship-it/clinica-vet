@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Organizador de Documentos - Família</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body>
+    <!-- ========== TELAS DE AUTENTICAÇÃO ========== -->
+    <div id="authContainer" class="auth-container">
+        <!-- Tela de Login -->
+        <div id="loginScreen" class="auth-screen">
+            <div class="auth-card">
+                <h1><i class="fas fa-folder-open"></i> Organizador de Documentos</h1>
+                <p class="auth-subtitle">Entre na sua conta</p>
+                <form id="formLogin">
+                    <div class="form-group">
+                        <label for="loginNome">Primeiro nome</label>
+                        <input type="text" id="loginNome" required placeholder="Ex: Maria">
+                    </div>
+                    <div class="form-group">
+                        <label for="loginFamilia">ID da família</label>
+                        <input type="text" id="loginFamilia" required placeholder="Ex: Família Fevereiro">
+                    </div>
+                    <button type="submit" class="btn-primary btn-block"><i class="fas fa-sign-in-alt"></i> Entrar</button>
+                </form>
+                <p class="auth-switch">Não tem conta? <a href="#" id="goToCadastro">Cadastrar-se</a></p>
+            </div>
+        </div>
+
+        <!-- Tela de Cadastro -->
+        <div id="cadastroScreen" class="auth-screen hidden">
+            <div class="auth-card">
+                <h1><i class="fas fa-user-plus"></i> Criar conta</h1>
+                <p class="auth-subtitle">Cadastre-se para começar</p>
+                <form id="formCadastro">
+                    <div class="form-group">
+                        <label for="cadNome">Nome</label>
+                        <input type="text" id="cadNome" required placeholder="Ex: Maria">
+                    </div>
+                    <div class="form-group">
+                        <label for="cadSobrenome">Sobrenome</label>
+                        <input type="text" id="cadSobrenome" required placeholder="Ex: Silva">
+                    </div>
+                    <div class="form-group">
+                        <label for="cadEmail">E-mail</label>
+                        <input type="email" id="cadEmail" required placeholder="maria@email.com">
+                    </div>
+                    <div class="form-group">
+                        <label for="cadTelefone">Telefone</label>
+                        <input type="tel" id="cadTelefone" placeholder="(11) 99999-9999">
+                    </div>
+                    <div class="form-group">
+                        <label for="cadFamilia">ID da família</label>
+                        <input type="text" id="cadFamilia" required placeholder="Ex: Família Fevereiro">
+                    </div>
+                    <div class="form-group">
+                        <label for="cadFoto">Foto de perfil (opcional)</label>
+                        <input type="file" id="cadFoto" accept="image/*">
+                    </div>
+                    <button type="submit" class="btn-primary btn-block"><i class="fas fa-user-plus"></i> Cadastrar</button>
+                </form>
+                <p class="auth-switch">Já tem conta? <a href="#" id="goToLogin">Entrar</a></p>
+            </div>
+        </div>
+    </div>
+
+    
+    <div id="appContainer" class="app-container hidden">
+        <aside id="sidebar" class="sidebar">
+            <div class="sidebar-header">
+                <h2 class="sidebar-title"><i class="fas fa-folder-open"></i> Organizador</h2>
+                <button id="toggleSidebar" class="btn-toggle" aria-label="Fechar menu">
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+            </div>
+
+            <!-- Foto de perfil central -->
+            <div class="sidebar-photo-section">
+                <div class="user-photo-wrapper" id="userPhotoWrapper">
+                    <img id="userPhoto" class="user-photo" src="" alt="Foto do usuário">
+                    <div id="userPhotoPlaceholder" class="user-photo-placeholder">
+                        <i class="fas fa-user"></i>
+                    </div>
+                </div>
+                <p class="user-name-sidebar" id="userNameSidebar"></p>
+                <button type="button" class="btn-change-photo" id="btnChangePhoto">
+                    <i class="fas fa-camera"></i> Alterar foto
+                </button>
+            </div>
+
+            <!-- Abas de famílias -->
+            <div class="familia-tabs-section">
+                <label class="section-label">Minhas famílias</label>
+                <div id="familiaTabs" class="familia-tabs">
+                    <!-- Abas serão inseridas aqui -->
+                </div>
+            </div>
+
+         
+            <nav class="sidebar-nav">
+                <button class="nav-item active" data-action="documentos">
+                    <i class="fas fa-folder"></i>
+                    <span>Meus documentos</span>
+                </button>
+                <button class="nav-item" data-action="adicionar-familia">
+                    <i class="fas fa-users"></i>
+                    <span>Adicionar família</span>
+                </button>
+                <button class="nav-item" data-action="configuracoes">
+                    <i class="fas fa-cog"></i>
+                    <span>Configurações</span>
+                </button>
+            </nav>
+        </aside>
+
+        <button id="expandSidebar" class="btn-expand" aria-label="Abrir menu">
+            <i class="fas fa-bars"></i>
+        </button>
+
+       
+        <main id="main" class="main-content">
+            <header class="main-header">
+                <h1 id="pageTitle" class="page-title">Meus documentos</h1>
+                <button id="addDocument" class="btn-add" title="Adicionar novo documento">
+                    <i class="fas fa-plus"></i>
+                    <span class="btn-add-tooltip">Adicionar novo documento</span>
+                </button>
+            </header>
+
+            <section class="documents-area">
+                <div id="emptyState" class="empty-state">
+                    <i class="fas fa-folder-open empty-icon"></i>
+                    <p>Nenhum documento adicionado.</p>
+                    <button class="btn-primary" onclick="document.getElementById('addDocument')?.click()">
+                        <i class="fas fa-plus"></i> Adicionar primeiro documento
+                    </button>
+                </div>
+                <div id="documentsList" class="documents-list"></div>
+            </section>
+        </main>
+    </div>
+
+    
+    <div id="modalAdd" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2><i class="fas fa-file-upload"></i> Adicionar documento</h2>
+                <button class="btn-close" id="closeModalAdd">&times;</button>
+            </div>
+            <form id="formAddDocument">
+                <div class="form-group">
+                    <label for="docNome">Nome do documento</label>
+                    <input type="text" id="docNome" required placeholder="Ex: Passaporte, Certidão...">
+                </div>
+                <div class="form-group">
+                    <label for="docCategoria">Categoria</label>
+                    <select id="docCategoria" required>
+                        <option value="">Selecione uma categoria</option>
+                        <option value="Documentos pessoais">Documentos pessoais</option>
+                        <option value="Documentos de trabalho">Documentos de trabalho</option>
+                        <option value="Documentos escolares">Documentos escolares</option>
+                        <option value="Passaporte">Passaporte</option>
+                        <option value="Certidões">Certidões</option>
+                        <option value="Contratos">Contratos</option>
+                        <option value="Outros">Outros</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="docArquivo">Arquivo</label>
+                    <input type="file" id="docArquivo" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" required>
+                    <small class="form-hint">PDF, imagem ou Word. Máx. 2MB</small>
+                </div>
+                <div class="form-group">
+                    <label for="docNotas">Notas ou observações</label>
+                    <textarea id="docNotas" rows="3" placeholder="Ex: Renovar em 2027"></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" id="cancelAdd">Cancelar</button>
+                    <button type="submit" class="btn-primary"><i class="fas fa-save"></i> Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+  
+    <div id="modalView" class="modal">
+        <div class="modal-content modal-view">
+            <div class="modal-header">
+                <h2 id="viewDocTitle"></h2>
+                <button class="btn-close" id="closeModalView">&times;</button>
+            </div>
+            <div class="view-content">
+                <div id="viewDocPreview" class="doc-preview"></div>
+                <div class="view-details">
+                    <p><strong>Categoria:</strong> <span id="viewDocCategory"></span></p>
+                    <p><strong>Data de adição:</strong> <span id="viewDocDate"></span></p>
+                    <div id="viewDocNotes" class="view-notes">
+                        <strong>Notas:</strong>
+                        <p id="viewDocNotesText"></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+   
+    <div id="modalConfig" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2><i class="fas fa-cog"></i> Configurações</h2>
+                <button class="btn-close" id="closeModalConfig">&times;</button>
+            </div>
+            <div class="config-options">
+                <div class="form-group">
+                    <label>Foto de perfil</label>
+                    <div class="photo-config">
+                        <div class="user-photo-preview" id="configPhotoPreview"></div>
+                        <div>
+                            <input type="file" id="configPhotoInput" accept="image/*" class="hidden-input">
+                            <button type="button" class="btn-secondary" id="btnUploadPhoto">
+                                <i class="fas fa-upload"></i> Alterar foto
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Tema</label>
+                    <div class="theme-buttons">
+                        <button class="theme-btn" data-theme="claro">Claro</button>
+                        <button class="theme-btn" data-theme="escuro">Escuro</button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Cor de fundo</label>
+                    <div class="color-options" id="colorOptions">
+                        <button class="color-btn" data-color="azul" style="background: #4a90d9;"></button>
+                        <button class="color-btn" data-color="preto" style="background: #2d2d2d;"></button>
+                        <button class="color-btn" data-color="rosa" style="background: #e8a0b5;"></button>
+                        <button class="color-btn" data-color="verde" style="background: #7cb87c;"></button>
+                        <button class="color-btn" data-color="branco" style="background: #f8f9fa; border: 1px solid #ddd;"></button>
+                        <button class="color-btn" data-color="cinza" style="background: #9e9e9e;"></button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Cor da barra lateral</label>
+                    <div class="color-options" id="sidebarColorOptions">
+                        <button class="color-btn" data-sidebar="azul" style="background: #2c5282;"></button>
+                        <button class="color-btn" data-sidebar="preto" style="background: #1a1a1a;"></button>
+                        <button class="color-btn" data-sidebar="verde" style="background: #276749;"></button>
+                        <button class="color-btn" data-sidebar="roxo" style="background: #553c9a;"></button>
+                        <button class="color-btn" data-sidebar="cinza" style="background: #4a5568;"></button>
+                    </div>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" id="btnLogout">
+                        <i class="fas fa-sign-out-alt"></i> Sair
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    
+    <div id="modalAddFamilia" class="modal">
+        <div class="modal-content modal-sm">
+            <div class="modal-header">
+                <h2><i class="fas fa-users"></i> Adicionar família</h2>
+                <button class="btn-close" id="closeModalAddFamilia">&times;</button>
+            </div>
+            <form id="formAddFamilia">
+                <div class="form-group">
+                    <label for="novaFamiliaId">ID da família</label>
+                    <input type="text" id="novaFamiliaId" required placeholder="Ex: Família Silva">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" id="cancelAddFamilia">Cancelar</button>
+                    <button type="submit" class="btn-primary"><i class="fas fa-plus"></i> Adicionar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+   
+    <input type="file" id="sidebarPhotoInput" accept="image/*" class="hidden-input">
+
+    <!-- Modal Confirmar Exclusão -->
+    <div id="modalConfirm" class="modal">
+        <div class="modal-content modal-sm">
+            <div class="modal-header">
+                <h2><i class="fas fa-exclamation-triangle"></i> Confirmar</h2>
+                <button class="btn-close" id="closeModalConfirm">&times;</button>
+            </div>
+            <p id="confirmMessage">Tem certeza que deseja excluir?</p>
+            <div class="form-actions">
+                <button class="btn-secondary" id="cancelConfirm">Cancelar</button>
+                <button class="btn-danger" id="confirmDelete"><i class="fas fa-trash"></i> Excluir</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

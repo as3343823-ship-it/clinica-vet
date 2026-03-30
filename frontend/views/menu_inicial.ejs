@@ -2,31 +2,160 @@
 <html lang="pt">
 <head>
     <meta charset="UTF-8">
-    <title>Clínica Vet</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clinica Vet Pata-Node</title>
     <link rel="stylesheet" href="/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="/css/style.css">
 </head>
-<body>
-    <div class="container mt-5">
-        <h1 class="text-center mb-4">Bem-vindo à Clínica Vet Pata-Node</h1>
-        <div class="card mx-auto" style="max-width: 400px;">
-            <div class="card-body">
-                <h2 class="card-title text-center">Login</h2>
-                <form action="/auth/login" method="POST">
-                    <div class="mb-3">
-                        <label for="email" class="form-label">Email ou Username</label>
-                        <input type="text" name="email" id="email" class="form-control" required>
+<body data-bs-theme="light">
+    <% 
+        const currentTab = (typeof activeTab !== 'undefined' && activeTab) ? activeTab : 'login';
+        const currentFormData = (typeof formData !== 'undefined' && formData) ? formData : {};
+        const showLogin = currentTab === 'login';
+        const emailValue = currentFormData.email ? currentFormData.email : '';
+        const generoValue = currentFormData.genero ? currentFormData.genero : '';
+    %>
+
+    <div class="container py-5">
+        <div class="row justify-content-center">
+            <div class="col-lg-7 col-md-10">
+                <div class="card shadow-lg border-0 rounded-4">
+                    <div class="card-body p-4 p-md-5">
+                        <h1 class="h3 text-center mb-2 fw-bold" style="color: var(--primary);">Clínica Vet Pata-Node</h1>
+                        <p class="text-center text-muted mb-4">Acesso de funcionários e clientes</p>
+
+                        <% if (typeof error !== 'undefined' && error) { %>
+                            <div class="alert alert-danger" role="alert"><%= error %></div>
+                        <% } %>
+
+                        <ul class="nav nav-pills nav-fill mb-4 gap-2" role="tablist" aria-label="Acesso">
+                            <li class="nav-item" role="presentation">
+                                <button
+                                    id="btn-login"
+                                    class="nav-link rounded-3 <%= showLogin ? 'active' : '' %>"
+                                    type="button"
+                                    onclick="showPanel('login')"
+                                >
+                                    <i class="bi bi-box-arrow-in-right me-2"></i>Login
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button
+                                    id="btn-cadastro"
+                                    class="nav-link rounded-3 <%= showLogin ? '' : 'active' %>"
+                                    type="button"
+                                    onclick="showPanel('cadastro')"
+                                >
+                                    <i class="bi bi-person-plus me-2"></i>Cadastro
+                                </button>
+                            </li>
+                        </ul>
+
+                        <section id="panel-login" style="display: <%= showLogin ? 'block' : 'none' %>;">
+                            <form action="/auth/login" method="POST" novalidate>
+                                <div class="mb-3">
+                                    <label for="login-email" class="form-label fw-semibold">Email ou Username</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text"><i class="bi bi-person"></i></span>
+                                        <input type="text" name="email" id="login-email" class="form-control rounded-3" required>
+                                    </div>
+                                </div>
+                                <div class="mb-4">
+                                    <label for="login-senha" class="form-label fw-semibold">Senha</label>
+                                    <div class="input-group">
+                                        <span class="input-group-text"><i class="bi bi-lock"></i></span>
+                                        <input type="password" name="senha" id="login-senha" class="form-control rounded-3" required>
+                                    </div>
+                                </div>
+                                <button type="submit" class="btn btn-primary w-100 rounded-3 py-2 fw-bold">Entrar</button>
+                            </form>
+                        </section>
+
+                        <section id="panel-cadastro" style="display: <%= showLogin ? 'none' : 'block' %>;">
+                            <form action="/auth/cadastrar-tutor" method="POST" novalidate>
+                                <div class="mb-3">
+                                    <label for="cadastro-nome" class="form-label fw-semibold">Nome completo</label>
+                                    <input
+                                        type="text"
+                                        name="nome"
+                                        id="cadastro-nome"
+                                        class="form-control rounded-3"
+                                        value="<%= currentFormData.nome || '' %>"
+                                        required
+                                    >
+                                </div>
+                                <div class="mb-3">
+                                    <label for="cadastro-email" class="form-label fw-semibold">Email</label>
+                                    <input
+                                        type="email"
+                                        name="email"
+                                        id="cadastro-email"
+                                        class="form-control rounded-3"
+                                        value="<%= emailValue %>"
+                                        required
+                                    >
+                                </div>
+                                <div class="mb-3">
+                                    <label for="cadastro-telefone" class="form-label fw-semibold">Telefone</label>
+                                    <input
+                                        type="text"
+                                        name="telefone"
+                                        id="cadastro-telefone"
+                                        class="form-control rounded-3"
+                                        value="<%= currentFormData.telefone || '' %>"
+                                    >
+                                </div>
+                                <div class="mb-3">
+                                    <label for="cadastro-genero" class="form-label fw-semibold">Gênero</label>
+                                    <select name="genero" id="cadastro-genero" class="form-select rounded-3">
+                                        <option value="" <%= generoValue === '' ? 'selected' : '' %>>Selecione</option>
+                                        <option value="Feminino" <%= generoValue === 'Feminino' ? 'selected' : '' %>>Feminino</option>
+                                        <option value="Masculino" <%= generoValue === 'Masculino' ? 'selected' : '' %>>Masculino</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="cadastro-morada" class="form-label fw-semibold">Morada</label>
+                                    <input
+                                        type="text"
+                                        name="morada"
+                                        id="cadastro-morada"
+                                        class="form-control rounded-3"
+                                        value="<%= currentFormData.morada || '' %>"
+                                    >
+                                </div>
+                                <div class="mb-4">
+                                    <label for="cadastro-password" class="form-label fw-semibold">Senha</label>
+                                    <input type="password" name="password" id="cadastro-password" class="form-control rounded-3" required>
+                                </div>
+                                <button type="submit" class="btn btn-success w-100 rounded-3 py-2 fw-bold">Cadastrar e entrar</button>
+                            </form>
+                        </section>
                     </div>
-                    <div class="mb-3">
-                        <label for="senha" class="form-label">Senha</label>
-                        <input type="password" name="senha" id="senha" class="form-control" required>
-                    </div>
-                    <button type="submit" class="btn btn-primary w-100">Entrar</button>
-                </form>
-                <p class="text-center mt-3">
-                    Não tem conta? <a href="/auth/cadastrar-tutor">Cadastre-se</a>
-                </p>
+                </div>
             </div>
         </div>
     </div>
+
+    <script>
+      function showPanel(panel) {
+        const isLogin = panel === 'login';
+        const loginPanel = document.getElementById('panel-login');
+        const cadastroPanel = document.getElementById('panel-cadastro');
+        const loginBtn = document.getElementById('btn-login');
+        const cadastroBtn = document.getElementById('btn-cadastro');
+
+        if (!loginPanel || !cadastroPanel || !loginBtn || !cadastroBtn) {
+          return;
+        }
+
+        loginPanel.style.display = isLogin ? 'block' : 'none';
+        cadastroPanel.style.display = isLogin ? 'none' : 'block';
+        loginBtn.classList.toggle('active', isLogin);
+        cadastroBtn.classList.toggle('active', !isLogin);
+      }
+    </script>
+
+    <script src="/js/app.js"></script>
 </body>
 </html>

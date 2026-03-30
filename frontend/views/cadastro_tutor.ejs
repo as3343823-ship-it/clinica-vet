@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="pt">
 <head>
@@ -11,7 +12,6 @@
             <div class="col-md-8">
                 <h2 class="text-center mb-4">Cadastro de Novo Cliente (Tutor)</h2>
 
-                <!-- Correção aqui: proteção contra error undefined -->
                 <% if (typeof error !== 'undefined' && error) { %>
                     <div class="alert alert-danger" role="alert">
                         <%= error %>
@@ -55,7 +55,7 @@
                 </form>
 
                 <p class="text-center mt-3">
-                    Já tem conta? <a href="/auth/login-tutor">Faça login aqui</a>
+                    Já tem conta? <a href="/">Faça login aqui</a>
                 </p>
             </div>
         </div>

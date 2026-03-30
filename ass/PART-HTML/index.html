@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title> ROGER GAME</title>
+   
+    <link rel="stylesheet" href="../PART-CSS/login.css">
+</head>
+<body>
+
+    <div class="container">
+
+       
+        <div id="screen-rules">
+            <header>
+            <h1>Bem-vindo ao Jogo do Roger</h1>
+            </header>
+            <p class="subtitle">Um jogo de estratégia X-Bola Gigante!</p>
+            
+            <div class="rules-box">
+                <h2>Regras Principais:</h2>
+                <ul class="rules-list">
+                    <li>O jogo é um tabuleiro 3x3, onde cada casa é outro tabuleiro 3x3.</li>
+                    <li>O primeiro jogador pode começar em qualquer casa de qualquer tabuleiro.</li>
+                    <li><strong>REGRA PRINCIPAL:</strong> A casa que você joga no tabuleiro pequeno (ex: canto superior direito) <strong>obriga</strong> o próximo jogador a jogar no tabuleiro grande correspondente (o tabuleiro do canto superior direito).</li>
+                    <li>Se o tabuleiro grande correspondente já estiver ganho ou empatado, o próximo jogador pode escolher <strong>qualquer</strong> tabuleiro livre.</li>
+                    <li>Ganha o jogo quem conquistar 3 tabuleiros grandes em linha.</li>
+                    <li>Se o tempo acabar, a vitória é decidida pelo número de tabuleiros ("X-Bolas") completados.</li>
+                </ul>
+            </div>
+
+            <button id="btn-rules-next" class="btn">Entendido, Entrar!</button>
+        </div>
+
+        <div id="screen-setup" class="hidden">
+            <h1>Configuração do Jogo</h1>
+            
+            <div class="form-group">
+                <label for="player1-name">Jogador (X)</label>
+                <input type="text" id="player1-name" placeholder="Nome do Jogador " value="">
+            </div>
+            
+            <div class="form-group">
+                <label for="player2-name" class="label-o">Jogador (O)</label>
+                <input type="text" id="player2-name" placeholder="Nome do Jogador " value="">
+            </div>
+            
+            <div class="form-group">
+                <label for="game-timer">Duração do Jogo</label>
+                <select id="game-timer">
+                    <option value="300">5 Minutos</option>
+                    <option value="600">10 Minutos</option>
+                    <option value="900">15 Minutos</option>
+                    <option value="1800">30 Minutos</option>
+                    <option value="0" selected>Sem Limite de Tempo</option>
+                </select>
+            </div>
+
+            <button id="btn-start-game" class="btn">Começar Jogo</button>
+        </div>
+
+    </div>
+
+    <script src="../PART-JS/login.js"></script>
+</body>
+</html>

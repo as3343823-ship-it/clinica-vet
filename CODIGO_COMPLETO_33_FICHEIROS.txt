@@ -1,0 +1,1790 @@
+
+
+===== backend/app.js =====
+
+const express = require('express');
+const bodyParser = require('body-parser');
+const cookieParser = require('cookie-parser');
+const path = require('path');
+
+const { verifyJWT } = require('./middleware/auth');
+
+const app = express();
+
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, '../frontend/views'));
+
+// Arquivos estáticos (CSS, JS, imagens)
+app.use(express.static(path.join(__dirname, '../frontend/public')));
+
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.json());
+app.use(cookieParser());
+
+// Rotas públicas
+app.use('/auth', require('./routes/auth'));
+
+// Rotas protegidas
+app.use('/animais', verifyJWT, require('./routes/animais'));
+app.use('/agenda', verifyJWT, require('./routes/agenda'));
+app.use('/relatorios', verifyJWT, require('./routes/relatorios'));
+
+app.get('/', (_, res) => res.render('menu_inicial'));
+
+app.get('/menu-funcionario', verifyJWT, (req, res) => {
+  if (req.user.tipo !== 'funcionario') return res.status(403).send('Acesso negado');
+  return res.render('menu_funcionario', { user: req.user });
+});
+
+app.get('/menu-cliente', verifyJWT, (req, res) => {
+  if (req.user.tipo !== 'tutor') return res.status(403).send('Acesso negado');
+  return res.render('menu_cliente', { user: req.user });
+});
+
+app.listen(3000, () => console.log('Server on 3000'));
+
+module.exports = app;
+
+
+===== backend/controllers/adminController.js =====
+
+const {
+  listUsuarios,
+  criarUsuario,
+  editarUsuario,
+  resetSenha,
+  ativarDesativar
+} = require('../services/adminService');
+
+const isAdmin = (req) => req.user?.tipo === 'funcionario' && req.user?.nivel === 'administrador';
+
+const denyIfNotAdmin = (req, res) => {
+  if (!isAdmin(req)) {
+    res.status(403).send('Acesso negado');
+    return true;
+  }
+
+  return false;
+};
+
+const handleListarUsuarios = async (req, res) => {
+  if (denyIfNotAdmin(req, res)) return;
+
+  try {
+    const usuarios = await listUsuarios();
+    return res.render('admin_criar_funcionario', { error: null, usuarios });
+  } catch (_) {
+    return res.status(500).send('Erro ao listar usuários');
+  }
+};
+
+const handleCriarUsuario = async (req, res) => {
+  if (denyIfNotAdmin(req, res)) return;
+
+  try {
+    await criarUsuario(req.body);
+    return res.redirect('/admin/listar-usuarios');
+  } catch (error) {
+    return res.render('admin_criar_funcionario', { error, usuarios: [] });
+  }
+};
+
+const handleEditarUsuario = async (req, res) => {
+  if (denyIfNotAdmin(req, res)) return;
+
+  try {
+    await editarUsuario(req.params.id, req.body);
+    return res.redirect('/admin/listar-usuarios');
+  } catch (_) {
+    return res.status(400).send('Erro ao editar usuário');
+  }
+};
+
+const handleResetSenha = async (req, res) => {
+  if (denyIfNotAdmin(req, res)) return;
+
+  try {
+    await resetSenha(req.params.id, req.body?.senha || '123456');
+    return res.redirect('/admin/listar-usuarios');
+  } catch (_) {
+    return res.status(400).send('Erro ao resetar senha');
+  }
+};
+
+const handleAtivarDesativar = async (req, res) => {
+  if (denyIfNotAdmin(req, res)) return;
+
+  try {
+    await ativarDesativar(req.params.id, req.body?.ativo === '1');
+    return res.redirect('/admin/listar-usuarios');
+  } catch (_) {
+    return res.status(400).send('Erro ao atualizar status');
+  }
+};
+
+module.exports = {
+  handleListarUsuarios,
+  handleCriarUsuario,
+  handleEditarUsuario,
+  handleResetSenha,
+  handleAtivarDesativar
+};
+
+
+===== backend/controllers/agendaController.js =====
+
+const { agendarTratamento, agendarExame, listarAgendamentos, verAgendaTutor } = require('../services/agendaService');
+
+const handleAgendarTratamento = async (req, res) => {
+  try {
+    await agendarTratamento(req.body);
+    res.send('Tratamento agendado');
+  } catch (error) {
+    res.status(500).send('Erro');
+  }
+};
+
+const handleAgendarExame = async (req, res) => {
+  try {
+    await agendarExame(req.body);
+    res.send('Exame agendado');
+  } catch (error) {
+    res.status(500).send('Erro');
+  }
+};
+
+const handleListarAgendamentos = async (req, res) => {
+  try {
+    const { tratamentos, exames } = await listarAgendamentos();
+    res.render('menu_funcionario', { tratamentos, exames, user: req.user });
+  } catch (error) {
+    res.status(500).send('Erro');
+  }
+};
+
+const handleVerAgenda = async (req, res) => {
+  if (req.user.tipo !== 'tutor') return res.status(403).send('Proibido');
+  try {
+    const animais = await verAgendaTutor(req.user.id);
+    res.render('menu_cliente', { animais, user: req.user }); // Adapte view
+  } catch (error) {
+    res.status(500).send('Erro');
+  }
+};
+
+module.exports = { handleAgendarTratamento, handleAgendarExame, handleListarAgendamentos, handleVerAgenda };
+
+
+===== backend/controllers/animaisController.js =====
+
+const { cadastrarAnimal, listarAnimaisPorTutor, darAltaAnimal } = require('../services/animaisService');
+const { criarProntuarioExemplo } = require('../services/prontuarioService');
+const { LISTA_ESPECIES } = require('../especies');
+
+const handleCadastrarAnimal = async (req, res) => {
+  const tutorId = req.user.tipo === 'tutor' ? req.user.id : req.body.tutorId;
+  const imagemPath = req.file ? `/images/animais/${req.file.filename}` : null;
+
+  try {
+    await cadastrarAnimal(req.body, tutorId, imagemPath);
+    return res.redirect(req.user.tipo === 'funcionario' ? '/menu-funcionario' : '/menu-cliente');
+  } catch (error) {
+    return res.status(500).send(error);
+  }
+};
+
+const handleListarAnimais = async (req, res) => {
+  if (req.user.tipo !== 'tutor') return res.status(403).send('Proibido');
+
+  try {
+    const animais = await listarAnimaisPorTutor(req.user.id);
+    return res.render('menu_cliente', { animais, user: req.user });
+  } catch (error) {
+    return res.status(500).send(error);
+  }
+};
+
+const handleDarAltaAnimal = async (req, res) => {
+  try {
+    await darAltaAnimal(req.body.nome);
+    return res.send('Alta OK');
+  } catch (error) {
+    return res.status(404).send(error);
+  }
+};
+
+const showCadastroAnimal = (_, res) => res.render('cadastro_animal', { especies: LISTA_ESPECIES });
+
+const showProntuarioClinico = (_, res) => {
+  const prontuario = criarProntuarioExemplo();
+  return res.render('prontuario_clinico', prontuario);
+};
+
+module.exports = {
+  handleCadastrarAnimal,
+  handleListarAnimais,
+  handleDarAltaAnimal,
+  showCadastroAnimal,
+  showProntuarioClinico
+};
+
+
+===== backend/controllers/authController.js =====
+
+const bcrypt = require('bcryptjs');
+const { 
+  loginFuncionario, 
+  loginTutor, 
+  cadastrarTutor, 
+  getUserById, 
+  updateSenha 
+} = require('../services/authService');
+
+const handleLoginFuncionario = async (req, res) => {
+  try {
+    const { token } = await loginFuncionario(req.body.username, req.body.senha);
+    res.cookie('jwt', token, { httpOnly: true, secure: false, maxAge: 3600000 });
+    res.redirect('/menu-funcionario');
+  } catch (error) {
+    res.render('login_funcionario', { error: error || 'Credenciais inválidas' });
+  }
+};
+
+const handleLoginTutor = async (req, res) => {
+  try {
+    const { token } = await loginTutor(req.body.email, req.body.senha);
+    res.cookie('jwt', token, { httpOnly: true, secure: false, maxAge: 3600000 });
+    res.redirect('/menu-cliente');
+  } catch (error) {
+    res.render('login_cliente', { error: error || 'Credenciais inválidas' });
+  }
+};
+
+const handleCadastrarTutor = async (req, res) => {
+  try {
+    await cadastrarTutor(req.body);
+    res.redirect('/auth/login-tutor');
+  } catch (error) {
+    res.render('cadastro_tutor', { error: error || 'Erro ao cadastrar' });
+  }
+};
+
+const handleAlterarSenha = async (req, res) => {
+  const { senhaAtual, senhaNova } = req.body;
+
+  try {
+    const user = await getUserById(req.user.id);
+    if (!bcrypt.compareSync(senhaAtual, user.senha_hash)) {
+      throw 'Senha atual inválida';
+    }
+
+    const novoHash = bcrypt.hashSync(senhaNova, 10);
+    await updateSenha(user.id, novoHash);
+
+    res.redirect('/perfil');
+  } catch (error) {
+    res.render('alterar_senha', { error: error || 'Erro ao alterar senha' });
+  }
+};
+
+module.exports = { handleLoginFuncionario, handleLoginTutor, handleCadastrarTutor, handleAlterarSenha };
+
+
+===== backend/controllers/relatoriosController.js =====
+
+const { gerarRelatorios, sistemaManchester } = require('../services/relatoriosService');
+
+const handleGerarRelatorios = async (req, res) => {
+  try {
+    const { total, classifCount } = await gerarRelatorios();
+    res.render('relatorios', { total, classifCount });
+  } catch (error) {
+    res.status(500).send('Erro');
+  }
+};
+
+const handleSistemaManchester = async (req, res) => {
+  try {
+    const animais = await sistemaManchester();
+    res.render('relatorios', { animais });
+  } catch (error) {
+    res.status(500).send('Erro');
+  }
+};
+
+module.exports = { handleGerarRelatorios, handleSistemaManchester };
+
+
+===== backend/models/Exame.js =====
+
+class Tratamento {
+  constructor(id, tipo, descricao, data, realizado, animalId) {
+    this.id = id;
+    this.tipo = tipo;
+    this.descricao = descricao;
+    this.data = data;
+    this.realizado = realizado;
+    this.animalId = animalId;
+  }
+}
+module.exports = Tratamento;
+
+
+===== backend/models/ProntuarioClinico.js =====
+
+class ProntuarioClinico {
+  constructor({ animal, historico, exames, alertas, alergias, crescimento, protocolos }) {
+    this.animal = animal;
+    this.historico = historico;
+    this.exames = exames;
+    this.alertas = alertas;
+    this.alergias = alergias;
+    this.crescimento = crescimento;
+    this.protocolos = protocolos;
+  }
+}
+
+module.exports = ProntuarioClinico;
+
+
+===== backend/routes/admin.js =====
+
+const express = require('express');
+
+const {
+  handleListarUsuarios,
+  handleCriarUsuario,
+  handleEditarUsuario,
+  handleResetSenha,
+  handleAtivarDesativar
+} = require('../controllers/adminController');
+
+const router = express.Router();
+
+router.get('/listar-usuarios', handleListarUsuarios);
+router.post('/criar-usuario', handleCriarUsuario);
+router.post('/editar-usuario/:id', handleEditarUsuario);
+router.post('/reset-senha/:id', handleResetSenha);
+router.post('/ativar-desativar/:id', handleAtivarDesativar);
+
+router.get('/criar-funcionario', (req, res) => {
+  if (req.user.tipo !== 'funcionario' || req.user.nivel !== 'administrador') {
+    return res.status(403).send('Acesso proibido');
+  }
+
+  return res.render('admin_criar_funcionario', { error: null, usuarios: [] });
+});
+
+router.post('/criar-funcionario', handleCriarUsuario);
+
+module.exports = router;
+
+
+===== backend/routes/agenda.js =====
+
+const express = require('express');
+const router = express.Router();
+const { verifyJWT } = require('../middleware/auth');
+const { handleAgendarTratamento, handleAgendarExame, handleListarAgendamentos, handleVerAgenda } = require('../controllers/agendaController');
+
+router.post('/agendar-tratamento', verifyJWT, handleAgendarTratamento);
+router.post('/agendar-exame', verifyJWT, handleAgendarExame);
+router.get('/listar-agendamentos', verifyJWT, handleListarAgendamentos);
+router.get('/ver-agenda', verifyJWT, handleVerAgenda);
+
+module.exports = router;
+
+
+===== backend/routes/animais.js =====
+
+const express = require('express');
+const multer = require('multer');
+const path = require('path');
+
+const router = express.Router();
+const {
+  handleCadastrarAnimal,
+  handleListarAnimais,
+  handleDarAltaAnimal,
+  showCadastroAnimal,
+  showProntuarioClinico
+} = require('../controllers/animaisController');
+
+const storage = multer.diskStorage({
+  destination: (_, __, cb) => {
+    cb(null, path.join(__dirname, '../../frontend/public/images/animais'));
+  },
+  filename: (_, file, cb) => {
+    cb(null, `${Date.now()}-${file.originalname}`);
+  }
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (!['.jpg', '.jpeg', '.png'].includes(ext)) {
+      return cb(new Error('Apenas JPG, JPEG ou PNG são permitidos'));
+    }
+    return cb(null, true);
+  }
+});
+
+router.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
+    return res.status(400).send('Imagem muito grande! Máximo 5 MB.');
+  }
+
+  if (err) {
+    return res.status(400).send(err.message);
+  }
+
+  return next();
+});
+
+router.get('/cadastrar-animal', showCadastroAnimal);
+router.get('/prontuario-clinico', showProntuarioClinico);
+router.post('/cadastrar-animal', upload.single('imagem'), handleCadastrarAnimal);
+router.get('/listar-animais', handleListarAnimais);
+router.post('/buscar-animal', handleDarAltaAnimal);
+
+module.exports = router;
+
+
+===== backend/routes/auth.js =====
+
+const express = require('express');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
+
+const { verifyJWT } = require('../middleware/auth');
+const { loginUnificado, loginFuncionario, loginTutor, cadastrarTutor, queryAsync } = require('../services/authService');
+
+const router = express.Router();
+const JWT_SECRET = 'seu-secret-super-seguro-aqui';
+
+const setAuthCookie = (res, token) => {
+  res.cookie('jwt', token, {
+    httpOnly: true,
+    secure: false,
+    maxAge: 3600000
+  });
+};
+
+router.get('/', (_, res) => res.render('menu_inicial', { error: null }));
+
+// Compatibilidade: endpoints antigos de login agora apontam para login único.
+router.get('/login-funcionario', (_, res) => res.redirect('/'));
+router.get('/login-tutor', (_, res) => res.redirect('/'));
+
+router.post('/login', async (req, res) => {
+  const { email, senha } = req.body;
+
+  try {
+    const { token, user, tutor } = await loginUnificado(email, senha);
+    setAuthCookie(res, token);
+    return res.redirect(user ? '/menu-funcionario' : '/menu-cliente');
+  } catch (_) {
+    return res.render('menu_inicial', { error: 'Credenciais inválidas' });
+  }
+});
+
+// Compatibilidade com formulários antigos
+router.post('/login-funcionario', async (req, res) => {
+  try {
+    const { token } = await loginFuncionario(req.body.username, req.body.senha);
+    setAuthCookie(res, token);
+    return res.redirect('/menu-funcionario');
+  } catch (_) {
+    return res.render('menu_inicial', { error: 'Credenciais inválidas' });
+  }
+});
+
+router.post('/login-tutor', async (req, res) => {
+  try {
+    const { token } = await loginTutor(req.body.email, req.body.senha);
+    setAuthCookie(res, token);
+    return res.redirect('/menu-cliente');
+  } catch (_) {
+    return res.render('menu_inicial', { error: 'Credenciais inválidas' });
+  }
+});
+
+router.get('/cadastrar-tutor', (_, res) => {
+  res.render('cadastro_tutor', { error: null });
+});
+
+router.post('/cadastrar-tutor', async (req, res) => {
+  try {
+    await cadastrarTutor(req.body);
+    return res.redirect('/');
+  } catch (error) {
+    return res.render('cadastro_tutor', { error });
+  }
+});
+
+router.post('/alterar-senha', verifyJWT, async (req, res) => {
+  const { senhaAtual, senhaNova } = req.body;
+
+  try {
+    if (!senhaAtual || !senhaNova) {
+      return res.render('alterar_senha', { error: 'Preencha senha atual e nova senha' });
+    }
+
+    if (req.user.tipo === 'funcionario') {
+      const [user] = await queryAsync('SELECT * FROM usuarios WHERE id = ?', [req.user.id]);
+      if (!user || !bcrypt.compareSync(senhaAtual, user.senha_hash)) {
+        return res.render('alterar_senha', { error: 'Senha atual inválida' });
+      }
+
+      const novoHash = bcrypt.hashSync(senhaNova, 10);
+      await queryAsync('UPDATE usuarios SET senha_hash = ? WHERE id = ?', [novoHash, req.user.id]);
+    } else {
+      const [tutor] = await queryAsync('SELECT * FROM tutores WHERE id = ?', [req.user.id]);
+      if (!tutor || !bcrypt.compareSync(senhaAtual, tutor.senha_hash)) {
+        return res.render('alterar_senha', { error: 'Senha atual inválida' });
+      }
+
+      const novoHash = bcrypt.hashSync(senhaNova, 10);
+      await queryAsync('UPDATE tutores SET senha_hash = ? WHERE id = ?', [novoHash, req.user.id]);
+    }
+
+    return res.redirect(req.user.tipo === 'funcionario' ? '/menu-funcionario' : '/menu-cliente');
+  } catch (_) {
+    return res.render('alterar_senha', { error: 'Erro ao alterar senha' });
+  }
+});
+
+router.get('/logout', (req, res) => {
+  res.clearCookie('jwt');
+  return res.redirect('/');
+});
+
+module.exports = router;
+
+
+===== backend/routes/relatorios.js =====
+
+const express = require('express');
+const router = express.Router();
+const { verifyJWT } = require('../middleware/auth');
+const { handleGerarRelatorios, handleSistemaManchester } = require('../controllers/relatoriosController');
+
+router.get('/gerar-relatorios', verifyJWT, handleGerarRelatorios);
+router.get('/sistema-manchester', verifyJWT, handleSistemaManchester);
+
+module.exports = router;
+
+
+===== backend/services/adminService.js =====
+
+const bcrypt = require('bcryptjs');
+const db = require('../config/db');
+
+const queryAsync = (sql, params = []) => new Promise((resolve, reject) => {
+  db.query(sql, params, (err, results) => (err ? reject(err) : resolve(results)));
+});
+
+const listUsuarios = async () => queryAsync('SELECT id, username, nivel, ativo FROM usuarios ORDER BY id DESC');
+
+const criarUsuario = async ({ username, senha, nivel }) => {
+  if (!username || !senha || !nivel) {
+    throw 'Preencha username, senha e nível';
+  }
+
+  const senhaHash = bcrypt.hashSync(senha, 10);
+  await queryAsync('INSERT INTO usuarios (username, senha_hash, nivel) VALUES (?, ?, ?)', [username, senhaHash, nivel]);
+};
+
+const editarUsuario = async (id, { username, nivel }) => {
+  if (!username || !nivel) throw 'Preencha username e nível';
+  await queryAsync('UPDATE usuarios SET username = ?, nivel = ? WHERE id = ?', [username, nivel, id]);
+};
+
+const resetSenha = async (id, novaSenha = '123456') => {
+  const senhaHash = bcrypt.hashSync(novaSenha, 10);
+  await queryAsync('UPDATE usuarios SET senha_hash = ? WHERE id = ?', [senhaHash, id]);
+};
+
+const ativarDesativar = async (id, ativo) => {
+  await queryAsync('UPDATE usuarios SET ativo = ? WHERE id = ?', [ativo ? 1 : 0, id]);
+};
+
+module.exports = {
+  listUsuarios,
+  criarUsuario,
+  editarUsuario,
+  resetSenha,
+  ativarDesativar
+};
+
+
+===== backend/services/agendaService.js =====
+
+const db = require('../config/db');
+
+const queryAsync = (sql, params) => new Promise((resolve, reject) => db.query(sql, params, (err, results) => err ? reject(err) : resolve(results)));
+
+const agendarTratamento = async ({ tipo, descricao, data, animalId }) => {
+  await queryAsync('INSERT INTO tratamentos (tipo, descricao, data, animal_id) VALUES (?, ?, ?, ?)', [tipo, descricao, data, animalId]);
+};
+
+const agendarExame = async ({ tipo, resultados, data, animalId }) => {
+  await queryAsync('INSERT INTO exames (tipo, resultados, data, animal_id) VALUES (?, ?, ?, ?)', [tipo, resultados, data, animalId]);
+};
+
+const listarAgendamentos = async () => {
+  const tratamentos = await queryAsync('SELECT * FROM tratamentos JOIN animais ON tratamentos.animal_id = animais.id');
+  const exames = await queryAsync('SELECT * FROM exames JOIN animais ON exames.animal_id = animais.id');
+  return { tratamentos, exames };
+};
+
+const verAgendaTutor = async (tutorId) => {
+  return await queryAsync('SELECT * FROM animais WHERE tutor_id = ?', [tutorId]);
+};
+
+module.exports = { agendarTratamento, agendarExame, listarAgendamentos, verAgendaTutor };
+
+
+===== backend/services/authService.js =====
+
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const db = require('../config/db');
+
+const JWT_SECRET = 'seu-secret-super-seguro-aqui';
+
+const queryAsync = (sql, params = []) => new Promise((resolve, reject) => {
+  db.query(sql, params, (err, results) => (err ? reject(err) : resolve(results)));
+});
+
+const loginFuncionario = async (username, senha) => {
+  const [user] = await queryAsync('SELECT * FROM usuarios WHERE username = ?', [username]);
+
+  if (!user || !bcrypt.compareSync(senha, user.senha_hash)) {
+    throw 'Credenciais inválidas';
+  }
+
+  const token = jwt.sign(
+    { id: user.id, username: user.username, nivel: user.nivel, tipo: 'funcionario' },
+    JWT_SECRET,
+    { expiresIn: '1h' }
+  );
+
+  return { token, user };
+};
+
+const loginTutor = async (email, senha) => {
+  const [tutor] = await queryAsync('SELECT * FROM tutores WHERE email = ?', [email]);
+
+  if (!tutor || !bcrypt.compareSync(senha, tutor.senha_hash)) {
+    throw 'Credenciais inválidas';
+  }
+
+  const token = jwt.sign(
+    { id: tutor.id, email: tutor.email, nome: tutor.nome, tipo: 'tutor' },
+    JWT_SECRET,
+    { expiresIn: '1h' }
+  );
+
+  return { token, tutor };
+};
+
+const loginUnificado = async (login, senha) => {
+  try {
+    return await loginFuncionario(login, senha);
+  } catch (_) {
+    return loginTutor(login, senha);
+  }
+};
+
+const cadastrarTutor = async ({ nome, email, telefone, genero, morada, password }) => {
+  if (!nome || !email || !password) {
+    throw 'Preencha nome, email e senha';
+  }
+
+  const senhaHash = bcrypt.hashSync(password, 10);
+
+  try {
+    await queryAsync(
+      'INSERT INTO tutores (nome, email, telefone, genero, morada, senha_hash) VALUES (?, ?, ?, ?, ?, ?)',
+      [nome, email, telefone || null, genero || null, morada || null, senhaHash]
+    );
+  } catch (err) {
+    throw err.code === 'ER_DUP_ENTRY' ? 'Este email já está cadastrado' : 'Erro ao cadastrar';
+  }
+};
+
+module.exports = {
+  loginFuncionario,
+  loginTutor,
+  loginUnificado,
+  cadastrarTutor,
+  queryAsync
+};
+
+
+===== backend/services/prontuarioService.js =====
+
+const ProntuarioClinico = require('../models/ProntuarioClinico');
+
+const criarProntuarioExemplo = () => new ProntuarioClinico({
+  animal: {
+    nome: 'Thor',
+    especie: 'Canino',
+    raca: 'Labrador',
+    tutor: 'Mariana Souza',
+    pesoAtual: '28.4',
+    ultimoRetorno: '05/02/2026'
+  },
+  historico: [
+    { data: '05/02/2026', evento: 'Consulta de retorno: melhora da dermatite, manter protocolo.' },
+    { data: '20/01/2026', evento: 'Solicitados exames de sangue e urina por poliúria.' },
+    { data: '10/12/2025', evento: 'Vacinação anual e avaliação nutricional.' }
+  ],
+  exames: [
+    { tipo: 'Hemograma completo', data: '20/01/2026', status: 'Concluído' },
+    { tipo: 'Raio-x torácico', data: '20/01/2026', status: 'Em análise' },
+    { tipo: 'Urina tipo 1', data: '20/01/2026', status: 'Aguardando coleta' }
+  ],
+  alertas: { proximoRetorno: '19/02/2026' },
+  alergias: ['Alergia a dipirona', 'Restrição a frango'],
+  crescimento: [
+    { periodo: 'Nov/2025', peso: '26.8' },
+    { periodo: 'Dez/2025', peso: '27.2' },
+    { periodo: 'Jan/2026', peso: '27.9' },
+    { periodo: 'Fev/2026', peso: '28.4' }
+  ],
+  protocolos: ['Dermatite atópica', 'Dor aguda', 'Gastroenterite', 'Pós-operatório']
+});
+
+module.exports = { criarProntuarioExemplo };
+
+
+===== frontend/public/css/style.css =====
+
+:root {
+  --primary: #123a6d;
+  --primary-soft: #1f4d87;
+  --black: #0d0f14;
+  --gray-100: #f6f7f9;
+  --gray-200: #e8eaf0;
+  --gray-500: #697387;
+  --gray-800: #1b2433;
+  --white: #ffffff;
+  --success: #1f9d67;
+  --danger: #d64545;
+  --warning: #df9a23;
+  --shadow: 0 10px 25px rgba(16, 24, 40, 0.08);
+}
+
+[data-bs-theme="dark"] {
+  --app-bg: #090b10;
+  --surface: #111521;
+  --surface-muted: #171d2b;
+  --text: #f3f4f8;
+  --text-soft: #a2afc2;
+  --border: #263046;
+}
+
+[data-bs-theme="light"] {
+  --app-bg: var(--gray-100);
+  --surface: var(--white);
+  --surface-muted: #f9fbff;
+  --text: var(--gray-800);
+  --text-soft: var(--gray-500);
+  --border: var(--gray-200);
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  background: var(--app-bg);
+  color: var(--text);
+}
+
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 270px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: 1.25rem;
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  overflow-y: auto;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  font-weight: 700;
+  margin-bottom: 1.4rem;
+}
+
+.brand i {
+  color: var(--primary);
+}
+
+.nav-link {
+  color: var(--text);
+  border-radius: 12px;
+  padding: 0.7rem 0.9rem;
+  margin-bottom: 0.35rem;
+}
+
+.nav-link:hover,
+.nav-link.active {
+  background: var(--primary);
+  color: var(--white);
+}
+
+.content {
+  margin-left: 270px;
+  width: calc(100% - 270px);
+  padding: 1.5rem;
+}
+
+.page-header,
+.panel,
+.metric-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+}
+
+.page-header {
+  padding: 1rem 1.2rem;
+  margin-bottom: 1rem;
+}
+
+.panel {
+  padding: 1rem;
+  height: 100%;
+}
+
+.panel h5 {
+  margin-bottom: 0.8rem;
+}
+
+.form-control,
+.form-select,
+textarea {
+  background: var(--surface-muted) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 12px !important;
+}
+
+.form-control::placeholder,
+textarea::placeholder {
+  color: var(--text-soft);
+}
+
+.btn-primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  border-radius: 12px;
+}
+
+.btn-outline-primary {
+  border-radius: 12px;
+}
+
+.metric-card {
+  padding: 1rem;
+}
+
+.metric-value {
+  font-size: 1.35rem;
+  font-weight: 700;
+}
+
+.timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-left: 2px solid var(--border);
+}
+
+.timeline-item {
+  margin-left: 0.9rem;
+  margin-bottom: 0.9rem;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.75rem;
+}
+
+.timeline-date {
+  color: var(--text-soft);
+  font-size: 0.85rem;
+}
+
+.list-group-item {
+  background: var(--surface-muted);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.25rem 0.65rem;
+  font-size: 0.8rem;
+  margin: 0.2rem;
+}
+
+.tag.success { background: rgba(31, 157, 103, 0.14); color: var(--success); }
+.tag.warning { background: rgba(223, 154, 35, 0.14); color: var(--warning); }
+.tag.danger { background: rgba(214, 69, 69, 0.14); color: var(--danger); }
+
+.toggle-btn {
+  cursor: pointer;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.55rem 0.7rem;
+}
+
+@media (max-width: 992px) {
+  .sidebar {
+    position: static;
+    width: 100%;
+  }
+
+  .content {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .app-shell {
+    display: block;
+  }
+}
+
+
+===== frontend/public/js/app.js =====
+
+document.addEventListener('DOMContentLoaded', () => {
+  const body = document.body;
+  const toggle = document.getElementById('mode-toggle');
+
+  const getSavedTheme = () => {
+    try {
+      return localStorage.getItem('theme') || 'light';
+    } catch {
+      return 'light';
+    }
+  };
+
+  const setSavedTheme = (theme) => {
+    try {
+      localStorage.setItem('theme', theme);
+    } catch {
+      // Ambiente sem storage (ignora silenciosamente)
+    }
+  };
+
+  const applyTheme = (theme) => {
+    body.setAttribute('data-bs-theme', theme);
+
+    if (!toggle) return;
+
+    toggle.innerHTML = theme === 'dark'
+      ? '<i class="bi bi-sun-fill me-2"></i> Modo Claro'
+      : '<i class="bi bi-moon-stars-fill me-2"></i> Modo Escuro';
+  };
+
+  applyTheme(getSavedTheme());
+
+  if (toggle) {
+    toggle.addEventListener('click', () => {
+      const currentTheme = body.getAttribute('data-bs-theme') || 'light';
+      const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      setSavedTheme(nextTheme);
+      applyTheme(nextTheme);
+    });
+  }
+
+  const forms = document.querySelectorAll('[data-append-target]');
+
+  forms.forEach((form) => {
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+
+      const targetSelector = form.getAttribute('data-append-target');
+      if (!targetSelector) return;
+
+      const target = document.querySelector(targetSelector);
+      if (!target) return;
+
+      const fields = Array.from(form.querySelectorAll('input, textarea, select'));
+      const values = fields
+        .filter((field) => field.type !== 'file' && field.value.trim())
+        .map((field) => `<strong>${field.dataset.label || field.name}:</strong> ${field.value}`)
+        .join(' • ');
+
+      if (!values) return;
+
+      const item = document.createElement('li');
+      item.className = 'timeline-item';
+      item.innerHTML = `<span class="timeline-date">${new Date().toLocaleDateString('pt-BR')}</span><p class="mb-0">${values}</p>`;
+
+      target.prepend(item);
+      form.reset();
+    });
+  });
+});
+
+
+===== frontend/views/admin_criar_funcionario.ejs =====
+
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <title>Criar Funcionário</title>
+    <link rel="stylesheet" href="/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container mt-5">
+        <h2 class="text-center mb-4">Criar Novo Funcionário</h2>
+        <% if (typeof error !== 'undefined' && error) { %>
+            <div class="alert alert-danger" role="alert">
+                <%= error %>
+            </div>
+        <% } %>
+        <form action="/admin/criar-funcionario" method="POST">
+            <div class="mb-3">
+                <label for="username" class="form-label">Username</label>
+                <input type="text" name="username" id="username" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label for="senha" class="form-label">Senha</label>
+                <input type="password" name="senha" id="senha" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label for="nivel" class="form-label">Nível</label>
+                <select name="nivel" id="nivel" class="form-select" required>
+                    <option value="funcionario">Funcionário</option>
+                    <option value="administrador">Administrador</option>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary w-100">Criar</button>
+        </form>
+    </div>
+</body>
+</html>
+
+
+===== frontend/views/agendar_tratamento.ejs =====
+
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <title>Agendar Tratamento</title>
+    <link rel="stylesheet" href="/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container mt-5">
+        <h2 class="text-center mb-4">Agendar Tratamento</h2>
+        <form action="/agenda/agendar-tratamento" method="POST">
+            <div class="mb-3">
+                <label for="nome_animal" class="form-label">Nome do Animal</label>
+                <input type="text" name="nome_animal" id="nome_animal" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label for="tipo" class="form-label">Tipo de Tratamento</label>
+                <input type="text" name="tipo" id="tipo" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label for="descricao" class="form-label">Descrição</label>
+                <textarea name="descricao" id="descricao" class="form-control" required></textarea>
+            </div>
+            <div class="mb-3">
+                <label for="data" class="form-label">Data (DD/MM/AAAA)</label>
+                <input type="text" name="data" id="data" class="form-control" required>
+            </div>
+            <button type="submit" class="btn btn-primary w-100">Agendar</button>
+        </form>
+    </div>
+</body>
+</html>
+
+
+===== frontend/views/alterar_senha.ejs =====
+
+<!DOCTYPE html>
+<html lang="pt">
+<head><title>Alterar Senha</title><link rel="stylesheet" href="/css/bootstrap.min.css"></head>
+<body><div class="container mt-5"><h2>Alterar Senha</h2>
+<% if (error) { %><p class="alert alert-danger"><%= error %></p><% } %>
+<form action="/auth/alterar-senha" method="POST">
+<input type="password" name="senhaAtual" placeholder="Senha atual" class="form-control" required>
+<input type="password" name="senhaNova" placeholder="Nova senha" class="form-control" required>
+<button type="submit" class="btn btn-primary">Alterar</button></form></div></body></html>
+
+
+===== frontend/views/cadastro_animal.ejs =====
+
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <title>Cadastrar Animal</title>
+    <link rel="stylesheet" href="/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container mt-5">
+        <h2 class="text-center mb-4">Cadastrar Animal</h2>
+        <form action="/animais/cadastrar-animal" method="POST" enctype="multipart/form-data">
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="nome" class="form-label">Nome do animal</label>
+                    <input type="text" name="nome" id="nome" class="form-control" required>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="idade" class="form-label">Idade (em anos)</label>
+                    <input type="number" name="idade" id="idade" class="form-control" min="0" required>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="especie" class="form-label">Espécie</label>
+                    <select name="especie" id="especie" class="form-select" required>
+                        <% especies.forEach(esp => { %>
+                            <option value="<%= esp %>"><%= esp %></option>
+                        <% }); %>
+                    </select>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="raca" class="form-label">Raça</label>
+                    <input type="text" name="raca" id="raca" class="form-control">
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="sexo" class="form-label">Sexo</label>
+                    <select name="sexo" id="sexo" class="form-select" required>
+                        <option value="Macho">Macho</option>
+                        <option value="Fêmea">Fêmea</option>
+                    </select>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="peso" class="form-label">Peso (kg)</label>
+                    <input type="number" name="peso" id="peso" class="form-control" step="0.01" min="0" required>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label for="sintomas" class="form-label">Sintomas principais (descreva detalhadamente)</label>
+                <textarea name="sintomas" id="sintomas" class="form-control" rows="4" placeholder="Ex: Vomito, diarreia, falta de apetite há 2 dias..." required></textarea>
+            </div>
+
+            <div class="mb-3">
+                <label for="vacinas" class="form-label">Histórico de vacinas (opcional)</label>
+                <textarea name="vacinas" id="vacinas" class="form-control" rows="2" placeholder="Ex: Vacina antirrábica em 01/2023"></textarea>
+            </div>
+
+            <div class="mb-3">
+                <label for="historico" class="form-label">Histórico médico anterior (opcional)</label>
+                <textarea name="historico" id="historico" class="form-control" rows="3" placeholder="Ex: Cirurgia em 2022, alergia a medicamento X"></textarea>
+            </div>
+
+            <div class="mb-3">
+                <label for="gravidade" class="form-label">Gravidade dos sintomas</label>
+                <select name="gravidade" id="gravidade" class="form-select" required>
+                    <option value="1" selected>Leve (animal come e brinca normalmente)</option>
+                    <option value="2">Moderado (animal está abatido, mas responde)</option>
+                    <option value="3">Grave (animal não come, está muito abatido)</option>
+                </select>
+            </div>
+
+            <div class="mb-4">
+                <label for="imagem" class="form-label">Foto do animal (opcional, JPG/PNG, max 5MB)</label>
+                <input type="file" name="imagem" id="imagem" class="form-control" accept="image/jpeg, image/png">
+            </div>
+
+            <button type="submit" class="btn btn-primary w-100">Cadastrar Animal</button>
+        </form>
+    </div>
+</body>
+</html>
+
+
+===== frontend/views/cadastro_tutor.ejs =====
+
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <title>Cadastro de Tutor</title>
+    <link rel="stylesheet" href="/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container mt-5">
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <h2 class="text-center mb-4">Cadastro de Novo Cliente (Tutor)</h2>
+
+                <% if (typeof error !== 'undefined' && error) { %>
+                    <div class="alert alert-danger" role="alert">
+                        <%= error %>
+                    </div>
+                <% } %>
+
+                <form action="/auth/cadastrar-tutor" method="POST">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="nome" class="form-label">Nome completo</label>
+                            <input type="text" name="nome" id="nome" class="form-control" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="email" class="form-label">Email</label>
+                            <input type="email" name="email" id="email" class="form-control" required>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="telefone" class="form-label">Telefone</label>
+                            <input type="text" name="telefone" id="telefone" class="form-control">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="genero" class="form-label">Gênero</label>
+                            <input type="text" name="genero" id="genero" class="form-control">
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="morada" class="form-label">Morada</label>
+                        <input type="text" name="morada" id="morada" class="form-control">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="password" class="form-label">Password</label>
+                        <input type="password" name="password" id="password" class="form-control" required>
+                    </div>
+
+                    <button type="submit" class="btn btn-success w-100">Cadastrar</button>
+                </form>
+
+                <p class="text-center mt-3">
+                    Já tem conta? <a href="/">Faça login aqui</a>
+                </p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+
+
+===== frontend/views/detalhes_animal.ejs =====
+
+<!DOCTYPE html>
+<html lang="pt">
+<head><title>Cadastro Animal</title><link rel="stylesheet" href="/css/bootstrap.min.css"></head>
+<body><div class="container"><h2>Cadastrar Animal</h2>
+<form action="/animais/cadastrar-animal" method="POST" enctype="multipart/form-data">
+<input type="text" name="nome" placeholder="Nome do animal" required>
+<input type="number" name="idade" placeholder="Idade" required>
+<select name="especie"><% especies.forEach(esp => { %><option value="<%= esp %>"><%= esp %></option><% }); %></select>
+<input type="text" name="sexo" placeholder="Sexo (Macho/Fêmea)" required>
+<input type="number" name="peso" placeholder="Peso (kg)" required>
+<textarea name="sintomas" placeholder="Sintomas"></textarea>
+<select name="gravidade"><option value="1">Leve</option><option value="2">Moderado</option><option value="3">Grave</option></select>
+<input type="file" name="imagem" accept="image/*">
+<button type="submit">Cadastrar</button></form>
+<script src="/js/app.js"></script></div></body></html>
+
+
+===== frontend/views/login_cliente.ejs =====
+
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <title>Login</title>
+    <link rel="stylesheet" href="/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container mt-5">
+        <div class="row justify-content-center">
+            <div class="col-md-6">
+                <h2 class="text-center mb-4">Login Único</h2>
+
+                <% if (typeof error !== 'undefined' && error) { %>
+                    <div class="alert alert-danger" role="alert">
+                        <%= error %>
+                    </div>
+                <% } %>
+
+                <form action="/auth/login" method="POST">
+                    <div class="mb-3">
+                        <label for="email" class="form-label">Email ou Username</label>
+                        <input type="text" name="email" id="email" class="form-control" placeholder="Seu email ou username" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="senha" class="form-label">Senha</label>
+                        <input type="password" name="senha" id="senha" class="form-control" placeholder="Senha" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Entrar</button>
+                </form>
+
+                <p class="text-center mt-3">
+                    Ainda não tem conta? <a href="/auth/cadastrar-tutor">Cadastre-se aqui</a>
+                </p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+
+
+===== frontend/views/login_funcionario.ejs =====
+
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <title>Login</title>
+    <link rel="stylesheet" href="/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container mt-5">
+        <div class="row justify-content-center">
+            <div class="col-md-6">
+                <h2 class="text-center mb-4">Login Único</h2>
+
+                <% if (typeof error !== 'undefined' && error) { %>
+                    <div class="alert alert-danger" role="alert">
+                        <%= error %>
+                    </div>
+                <% } %>
+
+                <form action="/auth/login" method="POST">
+                    <div class="mb-3">
+                        <label for="email" class="form-label">Email ou Username</label>
+                        <input type="text" name="email" id="email" class="form-control" placeholder="Seu email ou username" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="senha" class="form-label">Senha</label>
+                        <input type="password" name="senha" id="senha" class="form-control" placeholder="Senha" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Entrar</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+
+
+===== frontend/views/menu_cliente.ejs =====
+
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clínica Vet Pata-Node</title>
+    <link rel="stylesheet" href="/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body data-bs-theme="light">
+    <div class="container mt-5">
+        <div class="row justify-content-center">
+            <div class="col-lg-6 col-md-8">
+                <div class="card shadow-lg border-0 rounded-4">
+                    <div class="card-body p-5">
+                        <h2 class="text-center mb-4 fw-bold text-primary">Bem-vindo à Clínica Vet Pata-Node</h2>
+
+                        <ul class="nav nav-tabs nav-fill mb-4" id="authTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active rounded-3" id="login-tab" data-bs-toggle="tab" data-bs-target="#login" type="button" role="tab" aria-controls="login" aria-selected="true">
+                                    <i class="bi bi-box-arrow-in-right me-2"></i> Login
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link rounded-3" id="cadastro-tab" data-bs-toggle="tab" data-bs-target="#cadastro" type="button" role="tab" aria-controls="cadastro" aria-selected="false">
+                                    <i class="bi bi-person-plus me-2"></i> Cadastro
+                                </button>
+                            </li>
+                        </ul>
+
+                        <div class="tab-content" id="authTabsContent">
+                            <!-- Tab Login -->
+                            <div class="tab-pane fade show active" id="login" role="tabpanel" aria-labelledby="login-tab">
+                                <form action="/auth/login" method="POST">
+                                    <div class="mb-3">
+                                        <label for="email" class="form-label fw-semibold">Email ou Username</label>
+                                        <div class="input-group">
+                                            <span class="input-group-text"><i class="bi bi-person"></i></span>
+                                            <input type="text" name="email" id="email" class="form-control rounded-3" required>
+                                        </div>
+                                    </div>
+                                    <div class="mb-4">
+                                        <label for="senha" class="form-label fw-semibold">Senha</label>
+                                        <div class="input-group">
+                                            <span class="input-group-text"><i class="bi bi-lock"></i></span>
+                                            <input type="password" name="senha" id="senha" class="form-control rounded-3" required>
+                                        </div>
+                                    </div>
+                                    <button type="submit" class="btn btn-primary w-100 rounded-3 py-3 fw-bold">Entrar</button>
+                                </form>
+                            </div>
+
+                            <!-- Tab Cadastro -->
+                            <div class="tab-pane fade" id="cadastro" role="tabpanel" aria-labelledby="cadastro-tab">
+                                <form action="/auth/cadastrar-tutor" method="POST">
+                                    <div class="mb-3">
+                                        <label for="nome" class="form-label fw-semibold">Nome completo</label>
+                                        <input type="text" name="nome" id="nome" class="form-control rounded-3" required>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="email" class="form-label fw-semibold">Email</label>
+                                        <input type="email" name="email" id="email" class="form-control rounded-3" required>
+                                    </div>
+                                    <div class="mb-4">
+                                        <label for="password" class="form-label fw-semibold">Senha</label>
+                                        <input type="password" name="password" id="password" class="form-control rounded-3" required>
+                                    </div>
+                                    <button type="submit" class="btn btn-success w-100 rounded-3 py-3 fw-bold">Cadastrar</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/app.js"></script>
+</body>
+</html>
+
+
+===== frontend/views/menu_funcionario.ejs =====
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Painel Clínico</title>
+  <link rel="stylesheet" href="/css/bootstrap.min.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body data-bs-theme="light">
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand"><i class="bi bi-heart-pulse-fill"></i> VetSmart Clinical</div>
+      <ul class="nav flex-column">
+        <li class="nav-item"><a class="nav-link active" href="/menu-funcionario"><i class="bi bi-grid me-2"></i>Dashboard</a></li>
+        <li class="nav-item"><a class="nav-link" href="/animais/cadastrar-animal"><i class="bi bi-plus-circle me-2"></i>Cadastrar Animal</a></li>
+        <li class="nav-item"><a class="nav-link" href="/animais/prontuario-clinico"><i class="bi bi-journal-medical me-2"></i>Prontuário</a></li>
+        <li class="nav-item"><a class="nav-link" href="/agenda/agendar-tratamento"><i class="bi bi-calendar-event me-2"></i>Agenda</a></li>
+        <li class="nav-item"><a class="nav-link" href="/relatorios/gerar-relatorios"><i class="bi bi-bar-chart-line me-2"></i>Relatórios</a></li>
+        <li class="nav-item"><a class="nav-link" href="/admin/criar-funcionario"><i class="bi bi-person-plus me-2"></i>Equipe</a></li>
+        <li class="nav-item"><a class="nav-link" href="/auth/logout"><i class="bi bi-box-arrow-right me-2"></i>Sair</a></li>
+      </ul>
+      <hr />
+      <div class="toggle-btn" id="mode-toggle"><i class="bi bi-moon-stars-fill me-2"></i> Modo Escuro</div>
+    </aside>
+
+    <main class="content">
+      <section class="page-header d-flex justify-content-between align-items-center">
+        <div>
+          <h3 class="mb-1">Olá, <%= user.username %></h3>
+          <small class="text-secondary">Central clínica moderna, rápida e organizada.</small>
+        </div>
+        <a href="/animais/prontuario-clinico" class="btn btn-primary"><i class="bi bi-lightning-charge me-1"></i>Acessar prontuário</a>
+      </section>
+
+      <section class="row g-3">
+        <div class="col-md-3"><div class="metric-card"><small>Pacientes hoje</small><div class="metric-value">18</div></div></div>
+        <div class="col-md-3"><div class="metric-card"><small>Retornos pendentes</small><div class="metric-value">7</div></div></div>
+        <div class="col-md-3"><div class="metric-card"><small>Exames em análise</small><div class="metric-value">12</div></div></div>
+        <div class="col-md-3"><div class="metric-card"><small>Prescrições emitidas</small><div class="metric-value">34</div></div></div>
+      </section>
+
+      <section class="row g-3 mt-1">
+        <div class="col-lg-8">
+          <div class="panel">
+            <h5>Fila clínica prioritária</h5>
+            <ul class="timeline">
+              <li class="timeline-item"><span class="timeline-date">09:20</span><p class="mb-0"><strong>Luna</strong> • Retorno dermatológico • prioridade moderada</p></li>
+              <li class="timeline-item"><span class="timeline-date">10:05</span><p class="mb-0"><strong>Thor</strong> • Revisão de exame de sangue</p></li>
+              <li class="timeline-item"><span class="timeline-date">10:50</span><p class="mb-0"><strong>Mel</strong> • Avaliação pós-cirúrgica</p></li>
+            </ul>
+          </div>
+        </div>
+        <div class="col-lg-4">
+          <div class="panel">
+            <h5>Atalhos rápidos</h5>
+            <div class="d-grid gap-2">
+              <a class="btn btn-outline-primary" href="/animais/cadastrar-animal">Novo paciente</a>
+              <a class="btn btn-outline-primary" href="/animais/prontuario-clinico">Nova evolução</a>
+              <a class="btn btn-outline-primary" href="/agenda/agendar-tratamento">Agendar retorno</a>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="/js/app.js"></script>
+</body>
+</html>
+
+
+===== frontend/views/menu_inicial.ejs =====
+
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <title>Clínica Vet</title>
+    <link rel="stylesheet" href="/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container mt-5">
+        <h1 class="text-center mb-4">Bem-vindo à Clínica Vet Pata-Node</h1>
+        <div class="card mx-auto" style="max-width: 400px;">
+            <div class="card-body">
+                <h2 class="card-title text-center">Login</h2>
+                <form action="/auth/login" method="POST">
+                    <div class="mb-3">
+                        <label for="email" class="form-label">Email ou Username</label>
+                        <input type="text" name="email" id="email" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="senha" class="form-label">Senha</label>
+                        <input type="password" name="senha" id="senha" class="form-control" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Entrar</button>
+                </form>
+                <p class="text-center mt-3">
+                    Não tem conta? <a href="/auth/cadastrar-tutor">Cadastre-se</a>
+                </p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+
+
+===== frontend/views/perfil.ejs =====
+
+<!DOCTYPE html>
+<html lang="pt">
+<head><title>Perfil</title><link rel="stylesheet" href="/css/bootstrap.min.css"></head>
+<body><div class="container mt-5"><h2>Perfil de <%= user.username %></h2>
+<form action="/auth/editar-perfil" method="POST">
+<input type="text" name="nome" value="<%= user.nome %>" class="form-control" required>
+<button type="submit" class="btn btn-primary">Salvar</button></form></div></body></html>
+
+
+===== frontend/views/prontuario_clinico.ejs =====
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Prontuário Clínico</title>
+  <link rel="stylesheet" href="/css/bootstrap.min.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body data-bs-theme="light">
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand"><i class="bi bi-heart-pulse-fill"></i> VetSmart Clinical</div>
+      <ul class="nav flex-column">
+        <li class="nav-item"><a class="nav-link" href="/menu-funcionario"><i class="bi bi-grid me-2"></i>Dashboard</a></li>
+        <li class="nav-item"><a class="nav-link active" href="/animais/prontuario-clinico"><i class="bi bi-journal-medical me-2"></i>Prontuário Clínico</a></li>
+        <li class="nav-item"><a class="nav-link" href="/agenda/agendar-tratamento"><i class="bi bi-calendar2-check me-2"></i>Agenda</a></li>
+        <li class="nav-item"><a class="nav-link" href="/relatorios/gerar-relatorios"><i class="bi bi-bar-chart me-2"></i>Relatórios</a></li>
+      </ul>
+      <hr />
+      <div class="toggle-btn" id="mode-toggle"><i class="bi bi-moon-stars-fill me-2"></i> Modo Escuro</div>
+    </aside>
+
+    <main class="content">
+      <section class="page-header d-flex justify-content-between align-items-center flex-wrap gap-3">
+        <div>
+          <h3 class="mb-1">Prontuário: <%= animal.nome %></h3>
+          <small class="text-secondary"><%= animal.especie %> • <%= animal.raca %> • Tutor: <%= animal.tutor %></small>
+        </div>
+        <button type="button" class="btn btn-primary"><i class="bi bi-plus-circle me-1"></i>Nova consulta</button>
+      </section>
+
+      <section class="row g-3 mb-3">
+        <div class="col-md-3"><div class="metric-card"><small>Peso atual</small><div class="metric-value"><%= animal.pesoAtual %> kg</div></div></div>
+        <div class="col-md-3"><div class="metric-card"><small>Último retorno</small><div class="metric-value"><%= animal.ultimoRetorno %></div></div></div>
+        <div class="col-md-3"><div class="metric-card"><small>Alergias</small><div class="metric-value"><%= alergias.length %></div></div></div>
+        <div class="col-md-3"><div class="metric-card"><small>Exames pendentes</small><div class="metric-value"><%= exames.filter((e) => e.status !== 'Concluído').length %></div></div></div>
+      </section>
+
+      <section class="row g-3">
+        <div class="col-lg-6">
+          <div class="panel">
+            <h5><i class="bi bi-clock-history me-2"></i>Histórico clínico (linha do tempo)</h5>
+            <ul class="timeline" id="timeline-list">
+              <% historico.forEach((item) => { %>
+                <li class="timeline-item"><span class="timeline-date"><%= item.data %></span><p class="mb-0"><%= item.evento %></p></li>
+              <% }) %>
+            </ul>
+          </div>
+        </div>
+
+        <div class="col-lg-6">
+          <div class="panel">
+            <h5><i class="bi bi-clipboard2-pulse me-2"></i>Anamnese estruturada</h5>
+            <form data-append-target="#timeline-list" class="row g-2">
+              <div class="col-6"><input class="form-control" data-label="Sintomas" name="sintomas" placeholder="Sintomas" /></div>
+              <div class="col-6"><input class="form-control" data-label="Hábitos" name="habitos" placeholder="Hábitos" /></div>
+              <div class="col-12"><input class="form-control" data-label="Alimentação" name="alimentacao" placeholder="Alimentação" /></div>
+              <div class="col-12"><button type="submit" class="btn btn-primary w-100">Salvar anamnese</button></div>
+            </form>
+          </div>
+        </div>
+
+        <div class="col-lg-6">
+          <div class="panel">
+            <h5><i class="bi bi-thermometer-half me-2"></i>Exames solicitados</h5>
+            <ul class="list-group">
+              <% exames.forEach((exame) => { %>
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                  <span><strong><%= exame.tipo %></strong> • <%= exame.data %></span>
+                  <span class="tag <%= exame.status === 'Concluído' ? 'success' : 'warning' %>"><%= exame.status %></span>
+                </li>
+              <% }) %>
+            </ul>
+          </div>
+        </div>
+
+        <div class="col-lg-6">
+          <div class="panel">
+            <h5><i class="bi bi-file-earmark-arrow-up me-2"></i>Upload de laudos e imagens</h5>
+            <input class="form-control mb-2" type="file" multiple />
+            <small class="text-secondary d-block mb-3">Suporte para PDFs, imagens de raio-x e ultrassom.</small>
+            <div class="d-flex gap-2 flex-wrap">
+              <span class="tag success">laudo_hemograma.pdf</span>
+              <span class="tag">rx_torax_03-02.png</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-lg-6">
+          <div class="panel">
+            <h5><i class="bi bi-activity me-2"></i>Evolução por consulta</h5>
+            <textarea class="form-control mb-2" rows="4" placeholder="Descreva evolução clínica do paciente..."></textarea>
+            <button type="button" class="btn btn-outline-primary w-100">Registrar evolução</button>
+          </div>
+        </div>
+
+        <div class="col-lg-6">
+          <div class="panel">
+            <h5><i class="bi bi-prescription2 me-2"></i>Prescrição digital</h5>
+            <form class="row g-2">
+              <div class="col-md-6"><input class="form-control" placeholder="Medicamento" /></div>
+              <div class="col-md-6"><input class="form-control" placeholder="Dose" /></div>
+              <div class="col-md-6"><input class="form-control" placeholder="Frequência" /></div>
+              <div class="col-md-6"><input class="form-control" placeholder="Duração" /></div>
+              <div class="col-12"><button type="button" class="btn btn-primary w-100">Emitir prescrição</button></div>
+            </form>
+          </div>
+        </div>
+
+        <div class="col-lg-4">
+          <div class="panel">
+            <h5><i class="bi bi-bell me-2"></i>Alertas de retorno</h5>
+            <p class="mb-1">Próximo retorno: <strong><%= alertas.proximoRetorno %></strong></p>
+            <span class="tag warning">Vacina em 12 dias</span>
+          </div>
+        </div>
+
+        <div class="col-lg-4">
+          <div class="panel">
+            <h5><i class="bi bi-exclamation-diamond me-2"></i>Alergias e restrições</h5>
+            <% alergias.forEach((item) => { %>
+              <span class="tag danger"><%= item %></span>
+            <% }) %>
+          </div>
+        </div>
+
+        <div class="col-lg-4">
+          <div class="panel">
+            <h5><i class="bi bi-graph-up-arrow me-2"></i>Peso e crescimento</h5>
+            <ul class="mb-0">
+              <% crescimento.forEach((item) => { %>
+                <li><%= item.periodo %>: <strong><%= item.peso %> kg</strong></li>
+              <% }) %>
+            </ul>
+          </div>
+        </div>
+
+        <div class="col-12">
+          <div class="panel">
+            <h5><i class="bi bi-journal-bookmark me-2"></i>Protocolos padrão de tratamento</h5>
+            <div class="d-flex flex-wrap gap-2">
+              <% protocolos.forEach((protocolo) => { %>
+                <button type="button" class="btn btn-outline-primary"><%= protocolo %></button>
+              <% }) %>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="/js/app.js"></script>
+</body>
+</html>
+
+
+===== frontend/views/relatorios.ejs =====
+
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <title>Relatórios</title>
+    <link rel="stylesheet" href="/css/bootstrap.min.css">
+</head>
+<body>
+    <div class="container">
+        <h2>Relatórios</h2>
+        <% if (typeof total !== 'undefined' && total !== null) { %>
+            <p>Total de animais: <%= total %></p>
+        <% } %>
+        <% if (typeof classifCount !== 'undefined' && classifCount !== null) { %>
+            <h3>Distribuição por classificação</h3>
+            <table class="table">
+                <tr><th>Classificação</th><th>Contagem</th></tr>
+                <% classifCount.forEach(c => { %>
+                    <tr><td><%= c.classif %></td><td><%= c.count %></td></tr>
+                <% }); %>
+            </table>
+        <% } %>
+        <% if (typeof animais !== 'undefined' && animais !== null) { %>
+            <h3>Sistema Manchester</h3>
+            <% animais.forEach(a => { %>
+                <p><%= a.nome %> - <%= a.classif %></p>
+            <% }); %>
+        <% } %>
+    </div>
+</body>
+</html>
